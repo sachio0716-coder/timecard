@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="出退勤">
+<meta name="theme-color" content="#1976d2">
+<title>交通誘導 出退勤管理</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: #f4f6f9;
+    color: #222;
+    min-height: 100vh;
+  }
+  .app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  header {
+    text-align: center;
+    padding: 12px 0 16px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 20px;
+    color: #1976d2;
+    letter-spacing: 1px;
+  }
+  header .sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #666;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  input[type="text"], input[type="email"] {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #fafafa;
+  }
+  input:focus { outline: none; border-color: #1976d2; background: #fff; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 18px;
+    font-size: 18px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    margin-top: 10px;
+    letter-spacing: 2px;
+    transition: transform 0.1s, opacity 0.2s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-in { background: #2e7d32; }
+  .btn-out { background: #d32f2f; }
+  .btn-secondary {
+    background: #f0f0f0;
+    color: #333;
+    font-size: 14px;
+    padding: 10px;
+    margin-top: 8px;
+  }
+  .status {
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 12px 0;
+    font-size: 14px;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.info { background: #e3f2fd; color: #1565c0; }
+  .status.success { background: #e8f5e9; color: #2e7d32; }
+  .status.error { background: #ffebee; color: #c62828; }
+  .gps-info {
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+    margin-top: 6px;
+    word-break: break-all;
+  }
+  .history {
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .history-item {
+    border-bottom: 1px solid #eee;
+    padding: 10px 0;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-time { font-weight: 600; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    margin-right: 6px;
+  }
+  .badge-in { background: #2e7d32; }
+  .badge-out { background: #d32f2f; }
+  .map-link {
+    color: #1976d2;
+    font-size: 11px;
+    text-decoration: none;
+  }
+  h2 {
+    font-size: 14px;
+    color: #555;
+    margin: 0 0 10px;
+    border-left: 4px solid #1976d2;
+    padding-left: 8px;
+  }
+  .clock {
+    text-align: center;
+    font-size: 36px;
+    font-weight: 700;
+    color: #1976d2;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+  }
+  .date {
+    text-align: center;
+    font-size: 13px;
+    color: #777;
+    margin-bottom: 4px;
+  }
+  .config-toggle {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 12px;
+  }
+  .config-toggle a { color: #888; text-decoration: underline; }
+  .hidden { display: none; }
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: #999;
+    padding: 16px 0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>交通誘導 出退勤管理</h1>
+    <div class="sub">スマホで簡単タイムカード</div>
+  </header>
+
+  <div class="card">
+    <div class="date" id="dateDisplay"></div>
+    <div class="clock" id="clockDisplay">--:--:--</div>
+  </div>
+
+  <div class="card" id="settingCard">
+    <h2>基本設定</h2>
+    <div style="margin-bottom: 10px;">
+      <label>社員名</label>
+      <input type="text" id="employeeName" placeholder="例：山田 太郎" autocomplete="name">
+    </div>
+    <div style="margin-bottom: 10px;">
+      <label>社員番号（任意）</label>
+      <input type="text" id="employeeId" placeholder="例：001">
+    </div>
+    <div>
+      <label>送信先メールアドレス（管理者）</label>
+      <input type="email" id="adminEmail" placeholder="kanri@example.com" autocomplete="email">
+    </div>
+    <button class="btn btn-secondary" id="saveSettingsBtn">設定を保存</button>
+  </div>
+
+  <div class="card">
+    <h2>出退勤打刻</h2>
+    <div class="status" id="statusBox"></div>
+    <button class="btn btn-in" id="checkInBtn">出 勤</button>
+    <button class="btn btn-out" id="checkOutBtn">退 勤</button>
+    <div class="gps-info" id="gpsInfo">※ボタンを押すとGPSを取得します</div>
+  </div>
+
+  <div class="card">
+    <h2>本日の記録</h2>
+    <div class="history" id="historyList">
+      <div style="text-align:center; color:#aaa; padding:20px; font-size:13px;">記録がありません</div>
+    </div>
+    <button class="btn btn-secondary" id="clearHistoryBtn">履歴をクリア（端末内のみ）</button>
+  </div>
+
+  <div class="config-toggle">
+    <a href="#" id="aboutLink">このアプリについて</a>
+  </div>
+
+  <div class="card hidden" id="aboutCard">
+    <h2>使い方</h2>
+    <ol style="font-size:13px; color:#555; padding-left:20px; line-height:1.8;">
+      <li>初回のみ「基本設定」で氏名・送信先を入力し保存</li>
+      <li>現場到着時に「出勤」ボタンを押す</li>
+      <li>GPS位置が取得されメールアプリが立ち上がる</li>
+      <li>そのまま送信ボタンを押すだけで完了</li>
+      <li>退勤時も同様に「退勤」ボタンを押す</li>
+    </ol>
+    <p style="font-size:12px; color:#888; margin-top:10px;">
+      ※位置情報の利用許可が必要です。<br>
+      ※端末内の履歴は参考用で、正式な記録は送信メールから集計されます。
+    </p>
+  </div>
+
+  <footer>v1.0 プロトタイプ</footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ========== 設定の読み込み・保存 ==========
+  const STORAGE_KEY = 'timecard_settings_v1';
+  const HISTORY_KEY = 'timecard_history_v1';
+
+  function loadSettings() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    } catch (e) { return {}; }
+  }
+  function saveSettings(s) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  }
+  function loadHistory() {
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+    } catch (e) { return []; }
+  }
+  function saveHistory(h) {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+  }
+
+  const settings = loadSettings();
+  document.getElementById('employeeName').value = settings.name || '';
+  document.getElementById('employeeId').value = settings.empId || '';
+  document.getElementById('adminEmail').value = settings.adminEmail || '';
+
+  // ========== 時計表示 ==========
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function updateClock() {
+    const now = new Date();
+    const days = ['日','月','火','水','木','金','土'];
+    document.getElementById('dateDisplay').textContent =
+      `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日(${days[now.getDay()]})`;
+    document.getElementById('clockDisplay').textContent =
+      `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ========== ステータス表示 ==========
+  function showStatus(msg, type) {
+    const box = document.getElementById('statusBox');
+    box.textContent = msg;
+    box.className = 'status show ' + (type || 'info');
+  }
+  function hideStatus() {
+    document.getElementById('statusBox').className = 'status';
+  }
+
+  // ========== 設定保存 ==========
+  document.getElementById('saveSettingsBtn').addEventListener('click', function() {
+    const name = document.getElementById('employeeName').value.trim();
+    const empId = document.getElementById('employeeId').value.trim();
+    const adminEmail = document.getElementById('adminEmail').value.trim();
+    if (!name) { alert('社員名を入力してください'); return; }
+    if (!adminEmail) { alert('送信先メールアドレスを入力してください'); return; }
+    saveSettings({ name, empId, adminEmail });
+    showStatus('設定を保存しました', 'success');
+    setTimeout(hideStatus, 2000);
+  });
+
+  // ========== GPS取得 ==========
+  function getLocation() {
+    return new Promise(function(resolve, reject) {
+      if (!navigator.geolocation) {
+        reject(new Error('この端末では位置情報を取得できません'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        function(pos) {
+          resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: Math.round(pos.coords.accuracy)
+          });
+        },
+        function(err) {
+          let msg = '位置情報の取得に失敗しました';
+          if (err.code === 1) msg = '位置情報の利用が拒否されています。設定で許可してください';
+          else if (err.code === 2) msg = '位置情報を取得できません（電波状況をご確認ください）';
+          else if (err.code === 3) msg = '位置情報の取得がタイムアウトしました';
+          reject(new Error(msg));
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    });
+  }
+
+  // ========== 打刻処理 ==========
+  async function punch(type) {
+    const s = loadSettings();
+    if (!s.name || !s.adminEmail) {
+      showStatus('先に基本設定を保存してください', 'error');
+      return;
+    }
+
+    document.getElementById('checkInBtn').disabled = true;
+    document.getElementById('checkOutBtn').disabled = true;
+    showStatus('GPSを取得中...しばらくお待ちください', 'info');
+    document.getElementById('gpsInfo').textContent = '取得中...';
+
+    try {
+      const loc = await getLocation();
+      const now = new Date();
+      const ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const mapsUrl = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+
+      const typeLabel = type === 'in' ? '出勤' : '退勤';
+      const subject = `[${typeLabel}] ${s.name} ${ts.substring(0,10)}`;
+
+      // メール本文（GASでパースしやすい固定フォーマット）
+      const body =
+`■ 出退勤記録
+種別: ${typeLabel}
+氏名: ${s.name}
+社員番号: ${s.empId || '(未設定)'}
+日時: ${ts}
+緯度: ${loc.lat}
+経度: ${loc.lng}
+精度: ±${loc.accuracy}m
+地図: ${mapsUrl}
+
+---
+このメールは出退勤管理アプリから自動生成されました。
+内容を確認のうえ、そのまま送信してください。`;
+
+      // 履歴に保存
+      const history = loadHistory();
+      history.unshift({
+        type: type,
+        name: s.name,
+        time: ts,
+        lat: loc.lat,
+        lng: loc.lng,
+        accuracy: loc.accuracy,
+        mapsUrl: mapsUrl
+      });
+      // 最新50件のみ保持
+      saveHistory(history.slice(0, 50));
+      renderHistory();
+
+      document.getElementById('gpsInfo').innerHTML =
+        `位置取得成功: ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)} (±${loc.accuracy}m)`;
+
+      // mailto: でメーラー起動
+      const mailto = `mailto:${encodeURIComponent(s.adminEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      showStatus(typeLabel + 'のメールを準備しました。送信ボタンを押してください', 'success');
+
+      // メーラー起動
+      window.location.href = mailto;
+
+    } catch (err) {
+      showStatus(err.message, 'error');
+      document.getElementById('gpsInfo').textContent = '※ボタンを押すとGPSを取得します';
+    } finally {
+      setTimeout(function() {
+        document.getElementById('checkInBtn').disabled = false;
+        document.getElementById('checkOutBtn').disabled = false;
+      }, 2000);
+    }
+  }
+
+  document.getElementById('checkInBtn').addEventListener('click', function() { punch('in'); });
+  document.getElementById('checkOutBtn').addEventListener('click', function() { punch('out'); });
+
+  // ========== 履歴表示 ==========
+  function renderHistory() {
+    const list = document.getElementById('historyList');
+    const history = loadHistory();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+    const todayItems = history.filter(function(h) {
+      return h.time.startsWith(todayStr);
+    });
+
+    if (todayItems.length === 0) {
+      list.innerHTML = '<div style="text-align:center; color:#aaa; padding:20px; font-size:13px;">本日の記録はまだありません</div>';
+      return;
+    }
+    list.innerHTML = todayItems.map(function(h) {
+      const badge = h.type === 'in'
+        ? '<span class="badge badge-in">出勤</span>'
+        : '<span class="badge badge-out">退勤</span>';
+      const timeOnly = h.time.substring(11, 19);
+      return `<div class="history-item">
+        <div>${badge}<span class="history-time">${timeOnly}</span></div>
+        <a class="map-link" href="${h.mapsUrl}" target="_blank">地図を見る</a>
+      </div>`;
+    }).join('');
+  }
+  renderHistory();
+
+  // ========== 履歴クリア ==========
+  document.getElementById('clearHistoryBtn').addEventListener('click', function() {
+    if (confirm('端末内の履歴を消去します。よろしいですか？\n（送信済みメールは消えません）')) {
+      saveHistory([]);
+      renderHistory();
+      showStatus('履歴をクリアしました', 'info');
+      setTimeout(hideStatus, 2000);
+    }
+  });
+
+  // ========== About ==========
+  document.getElementById('aboutLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    document.getElementById('aboutCard').classList.toggle('hidden');
+  });
+
+})();
+</script>
+</body>
+</html>
