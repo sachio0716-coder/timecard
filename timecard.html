@@ -84,6 +84,20 @@
   .config-toggle a { color: #888; text-decoration: underline; }
   .hidden { display: none; }
   .note { font-size: 11px; color: #888; margin-top: 4px; }
+  .reg-status {
+    background: #e8f5e9; color: #2e7d32;
+    padding: 10px 12px; border-radius: 8px;
+    font-size: 14px; font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .reg-status .lock-icon { margin-right: 4px; }
+  input:read-only, input[readonly] {
+    background: #eee; color: #555; cursor: not-allowed;
+  }
+  .unlock-link {
+    display: inline-block; margin-top: 12px;
+    font-size: 11px; color: #aaa; text-decoration: underline;
+  }
   footer { text-align: center; font-size: 11px; color: #999; padding: 16px 0; }
 </style>
 </head>
@@ -101,6 +115,9 @@
 
   <div class="card" id="settingCard">
     <h2>基本設定</h2>
+    <div class="reg-status" id="regStatus" style="display:none;">
+      <span class="lock-icon">🔒</span><span id="regStatusText"></span>
+    </div>
     <div style="margin-bottom: 10px;">
       <label>社員名</label>
       <input type="text" id="employeeName" placeholder="例：山田 太郎" autocomplete="name">
@@ -115,6 +132,7 @@
       <div class="note">※管理者から指定されたURLを入力します。事前に設定済みの場合は変更不要です。</div>
     </div>
     <button class="btn btn-secondary" id="saveSettingsBtn">設定を保存</button>
+    <a href="#" id="unlockLink" class="unlock-link" style="display:none;">管理者の方はこちら（登録を変更）</a>
   </div>
 
   <div class="card">
@@ -140,7 +158,7 @@
   <div class="card hidden" id="aboutCard">
     <h2>使い方</h2>
     <ol style="font-size:13px; color:#555; padding-left:20px; line-height:1.8;">
-      <li>初回のみ「基本設定」で氏名を入力し保存</li>
+      <li>初回のみ「基本設定」で氏名を入力し保存（その後はロックされ変更できません）</li>
       <li>現場到着時に「出勤」ボタンを押す</li>
       <li>GPS位置が取得され、自動でサーバーに記録される</li>
       <li>「出勤を記録しました」と出れば完了</li>
@@ -148,11 +166,13 @@
     </ol>
     <p style="font-size:12px; color:#888; margin-top:10px;">
       ※位置情報の利用許可が必要です。<br>
-      ※電波が悪く送信に失敗した場合は、記録欄の「再送信」ボタンで送り直せます。
+      ※電波が悪く送信に失敗した場合は、記録欄の「再送信」ボタンで送り直せます。<br>
+      ※氏名の変更は管理者にご相談ください（解除コードが必要です）。<br>
+      ※移動中（車・自転車など）は打刻できません。現場で停止してから操作してください。
     </p>
   </div>
 
-  <footer>v2.0 直接送信方式</footer>
+  <footer>v2.2 移動中ブロック対応</footer>
 </div>
 
 <script>
@@ -165,6 +185,23 @@
   // 例： var DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfy.../exec';
   // ====================================================
   var DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzofI-npTSJu7g9Nxz8mibImeUeHKfbNjwTVfMqsBi3ka5tQm8LN1PT8FmECuVSl7j8/exec';
+
+  // ====================================================
+  // 【管理者設定】登録ロック解除コード（4桁の数字など）
+  // 社員が一度名前を登録すると編集できなくなります。
+  // 解除には下のコードが必要なので、管理者のみが知る番号にしてください。
+  // 例： var ADMIN_UNLOCK_CODE = '4827';
+  // ====================================================
+  var ADMIN_UNLOCK_CODE = '3439';
+
+  // ====================================================
+  // 【管理者設定】移動中ブロックのしきい値（m/s）
+  // この速度を超えるときは出退勤ボタンを押しても記録しません。
+  // 目安: 1.5 ≒ 5km/h（ゆっくり歩行） / 2.5 ≒ 9km/h（早歩き）
+  //       3.0 ≒ 11km/h（小走り） / 5.0 ≒ 18km/h（自転車）
+  // 車・自転車を確実に止めるには 2.5〜3.0 を推奨
+  // ====================================================
+  var MOVING_SPEED_THRESHOLD = 2.5;
 
   // ========== 保存キー ==========
   var STORAGE_KEY = 'timecard_settings_v2';
@@ -186,6 +223,55 @@
   document.getElementById('employeeName').value = settings.name || '';
   document.getElementById('employeeId').value = settings.empId || '';
   document.getElementById('webappUrl').value = settings.webappUrl || DEFAULT_WEBAPP_URL || '';
+
+  // ========== 登録ロック制御 ==========
+  function applyLockState() {
+    var s = loadSettings();
+    var isLocked = !!(s.name && s.name.trim());
+    var nameInput = document.getElementById('employeeName');
+    var idInput = document.getElementById('employeeId');
+    var urlInput = document.getElementById('webappUrl');
+    var saveBtn = document.getElementById('saveSettingsBtn');
+    var unlockLink = document.getElementById('unlockLink');
+    var regStatus = document.getElementById('regStatus');
+    var regText = document.getElementById('regStatusText');
+    if (isLocked) {
+      nameInput.readOnly = true;
+      idInput.readOnly = true;
+      urlInput.readOnly = true;
+      saveBtn.style.display = 'none';
+      unlockLink.style.display = 'inline-block';
+      regStatus.style.display = 'block';
+      regText.textContent = ' 登録済み：' + s.name +
+        (s.empId ? '（' + s.empId + '）' : '') + ' — この端末はロックされています';
+    } else {
+      nameInput.readOnly = false;
+      idInput.readOnly = false;
+      urlInput.readOnly = false;
+      saveBtn.style.display = 'block';
+      unlockLink.style.display = 'none';
+      regStatus.style.display = 'none';
+    }
+  }
+  applyLockState();
+
+  // 管理者解除リンク
+  document.getElementById('unlockLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    var code = prompt('管理者解除コードを入力してください');
+    if (code === null) return;
+    if (code.trim() === ADMIN_UNLOCK_CODE) {
+      // 一時的にロック解除（設定保存で再ロック）
+      document.getElementById('employeeName').readOnly = false;
+      document.getElementById('employeeId').readOnly = false;
+      document.getElementById('webappUrl').readOnly = false;
+      document.getElementById('saveSettingsBtn').style.display = 'block';
+      document.getElementById('unlockLink').style.display = 'none';
+      showStatus('ロックを一時解除しました。変更後「設定を保存」を押すと再ロックされます', 'info');
+    } else {
+      showStatus('解除コードが違います', 'error');
+    }
+  });
 
   // ========== 時計 ==========
   function pad(n) { return String(n).padStart(2, '0'); }
@@ -218,34 +304,77 @@
     if (!name) { alert('社員名を入力してください'); return; }
     if (!webappUrl) { alert('サーバーURLを入力してください（管理者にご確認ください）'); return; }
     saveSettings({ name: name, empId: empId, webappUrl: webappUrl });
-    showStatus('設定を保存しました', 'success');
-    setTimeout(hideStatus, 2000);
+    applyLockState();
+    showStatus('設定を保存しました。この端末は「' + name + '」として登録されました', 'success');
+    setTimeout(hideStatus, 3000);
   });
 
-  // ========== GPS取得 ==========
+  // ========== 距離計算（ハバーシン公式） ==========
+  function haversineMeters(lat1, lng1, lat2, lng2) {
+    var R = 6371000; // 地球半径(m)
+    var toRad = function(d) { return d * Math.PI / 180; };
+    var dLat = toRad(lat2 - lat1);
+    var dLng = toRad(lng2 - lng1);
+    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  // ========== GPS取得（速度判定付き） ==========
   function getLocation() {
     return new Promise(function(resolve, reject) {
       if (!navigator.geolocation) {
         reject(new Error('この端末では位置情報を取得できません'));
         return;
       }
-      navigator.geolocation.getCurrentPosition(
-        function(pos) {
-          resolve({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracy: Math.round(pos.coords.accuracy)
-          });
-        },
-        function(err) {
-          var msg = '位置情報の取得に失敗しました';
-          if (err.code === 1) msg = '位置情報の利用が拒否されています。設定で許可してください';
-          else if (err.code === 2) msg = '位置情報を取得できません（電波状況をご確認ください）';
-          else if (err.code === 3) msg = '位置情報の取得がタイムアウトしました';
-          reject(new Error(msg));
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
+      function geoErr(err) {
+        var msg = '位置情報の取得に失敗しました';
+        if (err.code === 1) msg = '位置情報の利用が拒否されています。設定で許可してください';
+        else if (err.code === 2) msg = '位置情報を取得できません（電波状況をご確認ください）';
+        else if (err.code === 3) msg = '位置情報の取得がタイムアウトしました';
+        reject(new Error(msg));
+      }
+      var opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+
+      navigator.geolocation.getCurrentPosition(function(pos1) {
+        var t1 = Date.now();
+        var loc1 = {
+          lat: pos1.coords.latitude,
+          lng: pos1.coords.longitude,
+          accuracy: Math.round(pos1.coords.accuracy),
+          speed: 0
+        };
+        var devSpeed = pos1.coords.speed;
+        // 端末が速度を返す場合はそれを採用
+        if (devSpeed !== null && devSpeed !== undefined && !isNaN(devSpeed) && devSpeed >= 0) {
+          loc1.speed = devSpeed;
+          resolve(loc1);
+          return;
+        }
+        // 端末が速度を返さない場合：2.5秒後にもう1点取って距離から速度算出
+        setTimeout(function() {
+          navigator.geolocation.getCurrentPosition(function(pos2) {
+            var t2 = Date.now();
+            var loc2 = {
+              lat: pos2.coords.latitude,
+              lng: pos2.coords.longitude,
+              accuracy: Math.round(pos2.coords.accuracy),
+              speed: 0
+            };
+            var rawDist = haversineMeters(loc1.lat, loc1.lng, loc2.lat, loc2.lng);
+            // GPS誤差ぶんを差し引いた実効移動距離
+            var buffer = (loc1.accuracy + loc2.accuracy) * 0.5;
+            var effective = Math.max(0, rawDist - buffer);
+            var elapsedSec = Math.max(0.1, (t2 - t1) / 1000);
+            loc2.speed = effective / elapsedSec;
+            resolve(loc2);
+          }, function() {
+            // 2点目失敗時は停止扱いで通す
+            resolve(loc1);
+          }, opts);
+        }, 2500);
+      }, geoErr, opts);
     });
   }
 
@@ -274,6 +403,17 @@
     document.getElementById('gpsInfo').textContent = '取得中...';
 
     getLocation().then(function(loc) {
+      var speedKmh = (loc.speed || 0) * 3.6;
+
+      // 移動中チェック
+      if (loc.speed > MOVING_SPEED_THRESHOLD) {
+        document.getElementById('gpsInfo').innerHTML =
+          '移動中（約' + speedKmh.toFixed(1) + 'km/h）— 打刻ブロック';
+        showStatus('移動中のため打刻できません（推定 約' + speedKmh.toFixed(1) +
+          'km/h）。安全な場所で停止してから再度お試しください', 'error');
+        return; // ここで打ち切り、履歴にも残さない
+      }
+
       var now = new Date();
       var ts = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + ' ' +
                pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
@@ -292,7 +432,8 @@
       };
 
       document.getElementById('gpsInfo').innerHTML =
-        '位置取得成功: ' + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6) + ' (±' + loc.accuracy + 'm)';
+        '位置取得成功: ' + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6) +
+        ' (±' + loc.accuracy + 'm, ' + speedKmh.toFixed(1) + 'km/h)';
       showStatus(typeLabel + 'を記録中...', 'info');
 
       return sendRecord(url, payload).then(function(ok) {
