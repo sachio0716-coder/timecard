@@ -99,6 +99,18 @@
     font-size: 11px; color: #aaa; text-decoration: underline;
   }
   footer { text-align: center; font-size: 11px; color: #999; padding: 16px 0; }
+  .today-state {
+    background: #f5f7fa; border: 1px solid #dfe4ea; border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 12px; font-size: 13px;
+  }
+  .today-state .row {
+    display: flex; justify-content: space-between; align-items: center; padding: 3px 0;
+  }
+  .today-state .lbl { color: #555; font-weight: 600; }
+  .today-state .val { font-family: monospace; font-weight: 700; }
+  .today-state .done { color: #2e7d32; }
+  .today-state .yet { color: #999; font-family: inherit; font-weight: 500; }
+  .btn.punched { opacity: 0.6; font-size: 15px; letter-spacing: 0; }
 </style>
 </head>
 <body>
@@ -138,6 +150,7 @@
   <div class="card">
     <h2>出退勤打刻</h2>
     <div class="status" id="statusBox"></div>
+    <div class="today-state" id="todayState" style="display:none;"></div>
     <button class="btn btn-in" id="checkInBtn">出 勤</button>
     <button class="btn btn-out" id="checkOutBtn">退 勤</button>
     <div class="gps-info" id="gpsInfo">※ボタンを押すとGPSを取得して自動で記録します</div>
@@ -160,7 +173,7 @@
     <ol style="font-size:13px; color:#555; padding-left:20px; line-height:1.8;">
       <li>初回のみ「基本設定」で氏名を入力し保存（その後はロックされ変更できません）</li>
       <li>現場到着時に「出勤」ボタンを押す</li>
-      <li>GPS位置が取得され、自動でサーバーに記録される</li>
+      <li>確認画面で「OK」を押すとGPSを取得して記録されます</li>
       <li>「出勤を記録しました」と出れば完了</li>
       <li>退勤時も同様に「退勤」ボタンを押す</li>
     </ol>
@@ -168,11 +181,12 @@
       ※位置情報の利用許可が必要です。<br>
       ※電波が悪く送信に失敗した場合は、記録欄の「再送信」ボタンで送り直せます。<br>
       ※氏名の変更は管理者にご相談ください（解除コードが必要です）。<br>
-      ※移動中（車・自転車など）は打刻できません。現場で停止してから操作してください。
+      ※移動中（車・自転車など）は打刻できません。現場で停止してから操作してください。<br>
+      ※既に打刻済みの日は「打ち直す」確認が出ます。前の打刻は履歴に残り、集計は最新の打刻で更新されます。
     </p>
   </div>
 
-  <footer>v2.2 移動中ブロック対応</footer>
+  <footer>v2.3 二度押し防止・打ち直し対応</footer>
 </div>
 
 <script>
@@ -192,7 +206,7 @@
   // 解除には下のコードが必要なので、管理者のみが知る番号にしてください。
   // 例： var ADMIN_UNLOCK_CODE = '4827';
   // ====================================================
-  var ADMIN_UNLOCK_CODE = '3439';
+  var ADMIN_UNLOCK_CODE = '2580';
 
   // ====================================================
   // 【管理者設定】移動中ブロックのしきい値（m/s）
@@ -390,12 +404,88 @@
     .catch(function() { return false; });
   }
 
+  // ========== 本日の打刻状態 ==========
+  // 履歴から「本日 一番早い出勤」と「本日 一番遅い退勤」を取り出す
+  // （集計スクリプトと同じロジック — 打ち直したら最新のもので上書きされる）
+  function getTodayState() {
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
+    var history = loadHistory();
+    var st = { inTime: null, outTime: null };
+    for (var i = 0; i < history.length; i++) {
+      var h = history[i];
+      if (!h.time || h.time.indexOf(todayStr) !== 0) continue;
+      if (h.status !== 'sent') continue; // 送信済のみ「打刻済み」扱い
+      var t = h.time.substring(11, 16); // HH:MM
+      if (h.type === 'in') {
+        if (!st.inTime || t < st.inTime) st.inTime = t;
+      } else if (h.type === 'out') {
+        if (!st.outTime || t > st.outTime) st.outTime = t;
+      }
+    }
+    return st;
+  }
+
+  // 本日の打刻状態バーとボタンの見た目を更新
+  function updateTodayStateDisplay() {
+    var st = getTodayState();
+    var box = document.getElementById('todayState');
+    var inBtn = document.getElementById('checkInBtn');
+    var outBtn = document.getElementById('checkOutBtn');
+
+    if (st.inTime || st.outTime) {
+      var inHtml = st.inTime
+        ? '<span class="val done">🟢 ' + st.inTime + ' 済み</span>'
+        : '<span class="val yet">— 未打刻</span>';
+      var outHtml = st.outTime
+        ? '<span class="val done">🔴 ' + st.outTime + ' 済み</span>'
+        : '<span class="val yet">— 未打刻</span>';
+      box.innerHTML =
+        '<div class="row"><span class="lbl">本日の出勤</span>' + inHtml + '</div>' +
+        '<div class="row"><span class="lbl">本日の退勤</span>' + outHtml + '</div>';
+      box.style.display = 'block';
+    } else {
+      box.style.display = 'none';
+    }
+
+    // ボタンの見た目を状態で切り替え
+    if (st.inTime) {
+      inBtn.textContent = '出勤 打刻済み ✓（打ち直す）';
+      inBtn.classList.add('punched');
+    } else {
+      inBtn.textContent = '出 勤';
+      inBtn.classList.remove('punched');
+    }
+    if (st.outTime) {
+      outBtn.textContent = '退勤 打刻済み ✓（打ち直す）';
+      outBtn.classList.add('punched');
+    } else {
+      outBtn.textContent = '退 勤';
+      outBtn.classList.remove('punched');
+    }
+  }
+
   // ========== 打刻処理 ==========
   function punch(type) {
     var s = loadSettings();
     var url = (s.webappUrl || DEFAULT_WEBAPP_URL || '').trim();
     if (!s.name) { showStatus('先に社員名を設定してください', 'error'); return; }
     if (!url) { showStatus('サーバーURLが未設定です。管理者にご確認ください', 'error'); return; }
+
+    // 二度押し・誤タップ防止：本日の状態を見て確認ダイアログを分ける
+    var typeLabel = type === 'in' ? '出勤' : '退勤';
+    var st = getTodayState();
+    var already = type === 'in' ? st.inTime : st.outTime;
+    var confirmMsg;
+    if (already) {
+      confirmMsg =
+        '本日は既に ' + typeLabel + ' を ' + already + ' に打刻済みです。\n\n' +
+        '打ち直しますか？\n' +
+        '（前の打刻は履歴に残りますが、集計は最新の打刻で更新されます）';
+    } else {
+      confirmMsg = typeLabel + ' 打刻しますか？\n現在地のGPSを取得して記録します。';
+    }
+    if (!confirm(confirmMsg)) return;
 
     document.getElementById('checkInBtn').disabled = true;
     document.getElementById('checkOutBtn').disabled = true;
@@ -418,7 +508,6 @@
       var ts = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + ' ' +
                pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
       var mapsUrl = 'https://www.google.com/maps?q=' + loc.lat + ',' + loc.lng;
-      var typeLabel = type === 'in' ? '出勤' : '退勤';
 
       var payload = {
         type: typeLabel,
@@ -452,6 +541,7 @@
         });
         saveHistory(history.slice(0, 50));
         renderHistory();
+        updateTodayStateDisplay();
         if (ok) {
           showStatus(typeLabel + 'を記録しました', 'success');
         } else {
@@ -462,10 +552,11 @@
       showStatus(err.message, 'error');
       document.getElementById('gpsInfo').textContent = '※ボタンを押すとGPSを取得して自動で記録します';
     }).then(function() {
+      // 連打・誤タップ防止のクールダウン（3秒）
       setTimeout(function() {
         document.getElementById('checkInBtn').disabled = false;
         document.getElementById('checkOutBtn').disabled = false;
-      }, 1500);
+      }, 3000);
     });
   }
 
@@ -499,6 +590,7 @@
       item.status = ok ? 'sent' : 'failed';
       saveHistory(history);
       renderHistory();
+      updateTodayStateDisplay();
       showStatus(ok ? '再送信に成功しました' : '再送信に失敗しました。もう一度お試しください',
                  ok ? 'success' : 'error');
     });
@@ -536,6 +628,7 @@
     }).join('');
   }
   renderHistory();
+  updateTodayStateDisplay();
 
   // 再送信ボタン（イベント委譲）
   document.getElementById('historyList').addEventListener('click', function(e) {
@@ -550,6 +643,7 @@
     if (confirm('端末内の履歴を消去します。よろしいですか？\n（サーバー側の記録は消えません）')) {
       saveHistory([]);
       renderHistory();
+      updateTodayStateDisplay();
       showStatus('履歴をクリアしました', 'info');
       setTimeout(hideStatus, 2000);
     }
