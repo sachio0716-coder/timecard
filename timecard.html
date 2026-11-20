@@ -2,11 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="出退勤">
 <meta name="theme-color" content="#1976d2">
-<title>交通誘導 出退勤管理</title>
+<title>出退勤タイムカード</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -25,13 +25,14 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.06);
   }
   label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; font-weight: 600; }
-  input[type="text"], input[type="url"] {
-    width: 100%; padding: 12px; font-size: 16px;
+  input[type="text"], input[type="url"], input[type="time"], input[type="date"], input[type="password"], select {
+    width: 100%; padding: 12px; font-size: 16px; font-family: inherit; color: #222;
     border: 1px solid #ccc; border-radius: 8px; background: #fafafa;
   }
-  input:focus { outline: none; border-color: #1976d2; background: #fff; }
+  input:focus, select:focus { outline: none; border-color: #1976d2; background: #fff; }
+  .field { margin-bottom: 10px; }
   .btn {
-    display: block; width: 100%; padding: 18px; font-size: 18px; font-weight: 700;
+    display: block; width: 100%; padding: 18px; font-size: 18px; font-weight: 700; font-family: inherit;
     border: none; border-radius: 12px; color: #fff; cursor: pointer; margin-top: 10px;
     letter-spacing: 2px; transition: transform 0.1s, opacity 0.2s;
   }
@@ -39,10 +40,15 @@
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-in { background: #2e7d32; }
   .btn-out { background: #d32f2f; }
-  .btn-secondary { background: #f0f0f0; color: #333; font-size: 14px; padding: 10px; margin-top: 8px; }
+  .btn-main { background: #1976d2; font-size: 16px; padding: 14px; letter-spacing: 1px; }
+  .btn-secondary { background: #f0f0f0; color: #333; font-size: 14px; padding: 10px; margin-top: 8px; letter-spacing: 0; }
   .btn-resend {
-    background: #ef6c00; color: #fff; font-size: 12px; font-weight: 700;
-    border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; letter-spacing: 0;
+    background: #ef6c00; color: #fff; font-size: 12px; font-weight: 700; font-family: inherit;
+    border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer;
+  }
+  .link-btn {
+    background: none; border: none; padding: 4px; font-size: 13px; font-family: inherit;
+    color: #1976d2; text-decoration: underline; cursor: pointer;
   }
   .status {
     text-align: center; padding: 12px; border-radius: 8px; margin: 12px 0;
@@ -53,6 +59,8 @@
   .status.success { background: #e8f5e9; color: #2e7d32; }
   .status.error { background: #ffebee; color: #c62828; }
   .gps-info { font-size: 12px; color: #666; text-align: center; margin-top: 6px; word-break: break-all; }
+  .last-info { font-size: 12px; color: #666; text-align: center; margin-top: 8px; }
+  .center { text-align: center; }
   .history { max-height: 300px; overflow-y: auto; }
   .history-item {
     border-bottom: 1px solid #eee; padding: 10px 0; font-size: 13px;
@@ -61,12 +69,14 @@
   .history-item:last-child { border-bottom: none; }
   .history-left { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
   .history-time { font-weight: 600; }
+  .empty { text-align: center; color: #999; padding: 20px; font-size: 13px; }
   .badge {
     display: inline-block; padding: 2px 8px; border-radius: 4px;
     font-size: 11px; font-weight: 700; color: #fff;
   }
   .badge-in { background: #2e7d32; }
   .badge-out { background: #d32f2f; }
+  .badge-fix { background: #6d4c41; }
   .status-tag { font-size: 11px; font-weight: 700; }
   .status-sent { color: #2e7d32; }
   .status-failed { color: #c62828; }
@@ -82,42 +92,127 @@
   .date { text-align: center; font-size: 13px; color: #777; margin-bottom: 4px; }
   .config-toggle { text-align: center; margin-top: 16px; font-size: 12px; }
   .config-toggle a { color: #888; text-decoration: underline; }
-  .hidden { display: none; }
+  .hidden { display: none !important; }
   .note { font-size: 11px; color: #888; margin-top: 4px; }
-  .reg-status {
-    background: #e8f5e9; color: #2e7d32;
-    padding: 10px 12px; border-radius: 8px;
-    font-size: 14px; font-weight: 700;
-    margin-bottom: 12px;
-  }
-  .reg-status .lock-icon { margin-right: 4px; }
-  input:read-only, input[readonly] {
-    background: #eee; color: #555; cursor: not-allowed;
-  }
-  .unlock-link {
-    display: inline-block; margin-top: 12px;
-    font-size: 11px; color: #aaa; text-decoration: underline;
-  }
   footer { text-align: center; font-size: 11px; color: #999; padding: 16px 0; }
+
+  /* 利用者の表示 */
+  .user-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .user-name { font-size: 16px; font-weight: 700; }
+  .user-sub { font-size: 12px; color: #666; margin-top: 2px; }
+  details.adv { margin-top: 6px; }
+  details.adv summary { font-size: 12px; color: #888; cursor: pointer; padding: 6px 0; }
+
+  /* 連続パーフェクト */
+  .streak {
+    background: linear-gradient(135deg, #fff8e1, #ffe0b2);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .streak-fire { font-size: 34px; line-height: 1; }
+  .streak-num { font-size: 22px; font-weight: 800; color: #e65100; }
+  .streak-num small { font-size: 13px; font-weight: 700; margin-left: 2px; }
+  .streak-text { font-size: 12px; color: #6d4c41; margin-top: 2px; }
+
+  /* 今日のおみくじ（引いたあとに表示） */
+  .omikuji-mini { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .omikuji-mini .rank { font-size: 18px; font-weight: 800; color: #c62828; white-space: nowrap; }
+  .omikuji-mini .msg { font-size: 13px; color: #444; flex: 1; }
+
+  /* モーダル */
+  .overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 50;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 420px;
+    max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  }
+  .modal h3 { margin: 0 0 8px; font-size: 18px; color: #222; }
+  .modal .lead { font-size: 14px; color: #444; line-height: 1.7; margin: 0 0 14px; }
+  .modal .warn {
+    background: #fff3e0; color: #e65100; border-radius: 8px; padding: 10px 12px;
+    font-size: 14px; font-weight: 700; line-height: 1.6; margin-bottom: 14px;
+  }
+  .modal .err { color: #c62828; font-size: 13px; min-height: 18px; margin-top: 6px; }
+  .step { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    border: 1px solid #bbb; background: #fff; color: #333; border-radius: 20px;
+    padding: 9px 14px; font-size: 14px; font-family: inherit; cursor: pointer;
+  }
+  .chip.on { background: #1976d2; border-color: #1976d2; color: #fff; font-weight: 700; }
+  .check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 4px 0 10px; }
+  .check-row input { width: 20px; height: 20px; }
+
+  /* おみくじ */
+  .omikuji-box { font-size: 72px; line-height: 1; text-align: center; margin: 14px 0; }
+  .omikuji-box.shake { animation: shake 0.9s ease-in-out; }
+  @keyframes shake {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(-14deg); } 30% { transform: rotate(12deg); }
+    45% { transform: rotate(-10deg); } 60% { transform: rotate(8deg); }
+    75% { transform: rotate(-5deg); } 90% { transform: rotate(3deg); }
+  }
+  .fortune {
+    text-align: center; font-size: 40px; font-weight: 800; color: #c62828;
+    letter-spacing: 6px; margin: 4px 0 2px; animation: pop 0.35s ease-out;
+  }
+  @keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .fortune-sub { text-align: center; font-size: 13px; color: #666; margin-bottom: 14px; }
+  .omikuji-row { border-top: 1px dashed #ddd; padding: 10px 0; }
+  .omikuji-row .k { font-size: 11px; color: #888; font-weight: 700; }
+  .omikuji-row .v { font-size: 15px; color: #222; margin-top: 2px; line-height: 1.6; }
+  .reward-streak {
+    text-align: center; background: #fff8e1; border-radius: 10px; padding: 10px;
+    font-size: 15px; font-weight: 700; color: #e65100; margin: 10px 0;
+  }
+  .big-emoji { font-size: 56px; text-align: center; line-height: 1; margin: 6px 0 10px; }
+  /* 登録ロック */
+  input[readonly], select:disabled { background: #eee; color: #555; cursor: not-allowed; }
+  .lock-note { font-size: 12px; color: #2e7d32; background: #e8f5e9; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-weight: 700; }
+  .admin-link { background: none; border: none; padding: 4px; font-size: 11px; color: #999; text-decoration: underline; cursor: pointer; font-family: inherit; }
+
+  /* 本日の打刻状態 */
   .today-state {
     background: #f5f7fa; border: 1px solid #dfe4ea; border-radius: 8px;
-    padding: 10px 12px; margin-bottom: 12px; font-size: 13px;
+    padding: 10px 12px; margin-bottom: 4px; font-size: 13px;
   }
-  .today-state .row {
-    display: flex; justify-content: space-between; align-items: center; padding: 3px 0;
-  }
+  .today-state .row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
   .today-state .lbl { color: #555; font-weight: 600; }
-  .today-state .val { font-family: monospace; font-weight: 700; }
-  .today-state .done { color: #2e7d32; }
-  .today-state .yet { color: #999; font-family: inherit; font-weight: 500; }
-  .btn.punched { opacity: 0.6; font-size: 15px; letter-spacing: 0; }
+  .today-state .done { color: #2e7d32; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .today-state .yet { color: #999; }
+  .btn.punched { opacity: 0.75; font-size: 15px; letter-spacing: 0; }
+
+  /* アルコールチェック */
+  .alc-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 4px 0; }
+  .alc-row .done { color: #2e7d32; font-weight: 700; }
+  .alc-row .yet { color: #999; }
+  .alc-row .bad { color: #c62828; font-weight: 700; }
+  .alc-btns { display: flex; gap: 8px; }
+  .alc-btns .btn { margin-top: 10px; font-size: 14px; padding: 12px 6px; letter-spacing: 0; }
+  .btn-alc { background: #6a1b9a; }
+  .photo-btn { background: #455a64; font-size: 16px; padding: 14px; letter-spacing: 0; margin-top: 0; }
+  .photo-preview { width: 100%; max-height: 260px; object-fit: contain; background: #000; border-radius: 10px; margin-top: 8px; display: block; }
+  .steps-mini { font-size: 13px; color: #444; background: #f3e5f5; border-radius: 8px; padding: 10px 12px; line-height: 1.8; margin-bottom: 12px; }
+  .val-input { font-size: 24px !important; text-align: center; letter-spacing: 3px; font-variant-numeric: tabular-nums; }
+  .danger { background: #c62828; color: #fff; border-radius: 12px; padding: 16px; text-align: center; font-weight: 700; line-height: 1.7; margin-bottom: 12px; }
+  .danger .big { font-size: 24px; display: block; margin: 4px 0; }
+  .tel-btn {
+    display: block; text-align: center; text-decoration: none; background: #c62828; color: #fff;
+    border-radius: 12px; padding: 16px; font-size: 18px; font-weight: 700; margin-top: 10px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .omikuji-box.shake, .fortune { animation: none; }
+  }
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <h1>交通誘導 出退勤管理</h1>
-    <div class="sub">スマホで簡単タイムカード</div>
+    <h1>出退勤タイムカード</h1>
+    <div class="sub">スマホで簡単打刻</div>
   </header>
 
   <div class="card">
@@ -125,43 +220,101 @@
     <div class="clock" id="clockDisplay">--:--:--</div>
   </div>
 
-  <div class="card" id="settingCard">
-    <h2>基本設定</h2>
-    <div class="reg-status" id="regStatus" style="display:none;">
-      <span class="lock-icon">🔒</span><span id="regStatusText"></span>
+  <!-- 利用者（設定済みのとき） -->
+  <div class="card hidden" id="userCard">
+    <div class="user-row">
+      <div>
+        <div class="user-name" id="userName"></div>
+        <div class="user-sub" id="userSub"></div>
+      </div>
+      <button class="admin-link" id="editSettingsBtn" type="button">登録の変更（管理者）</button>
     </div>
-    <div style="margin-bottom: 10px;">
-      <label>社員名</label>
-      <input type="text" id="employeeName" placeholder="例：山田 太郎" autocomplete="name">
-    </div>
-    <div style="margin-bottom: 10px;">
-      <label>社員番号（任意）</label>
-      <input type="text" id="employeeId" placeholder="例：001">
-    </div>
-    <div>
-      <label>サーバーURL（GASウェブアプリ）</label>
-      <input type="url" id="webappUrl" placeholder="https://script.google.com/macros/s/.../exec">
-      <div class="note">※管理者から指定されたURLを入力します。事前に設定済みの場合は変更不要です。</div>
-    </div>
-    <button class="btn btn-secondary" id="saveSettingsBtn">設定を保存</button>
-    <a href="#" id="unlockLink" class="unlock-link" style="display:none;">管理者の方はこちら（登録を変更）</a>
   </div>
 
+  <!-- 基本設定 -->
+  <div class="card" id="settingCard">
+    <h2>基本設定</h2>
+    <div class="lock-note hidden" id="lockNote"></div>
+    <div class="field">
+      <label for="employeeName">氏名</label>
+      <input type="text" id="employeeName" placeholder="例：山田 太郎" autocomplete="name">
+    </div>
+    <div class="field">
+      <label for="employeeId">社員番号（任意）</label>
+      <input type="text" id="employeeId" placeholder="例：001">
+    </div>
+    <div class="field">
+      <label for="company">会社</label>
+      <select id="company"></select>
+    </div>
+    <div class="field">
+      <label for="jobType">職種</label>
+      <select id="jobType"></select>
+    </div>
+    <details class="adv">
+      <summary>詳細設定（通常は変更不要）</summary>
+      <label for="webappUrl">サーバーURL（GASウェブアプリ）</label>
+      <input type="url" id="webappUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="note">※管理者から指定されたURLを入力します。事前に設定済みの場合は変更不要です。</div>
+    </details>
+    <div class="status" id="settingStatus"></div>
+    <button class="btn btn-secondary" id="saveSettingsBtn" type="button">設定を保存</button>
+    <div class="center hidden" id="unlockWrap" style="margin-top:8px;">
+      <button class="admin-link" id="unlockBtn" type="button">管理者の方はこちら（登録を変更）</button>
+    </div>
+  </div>
+
+  <!-- 連続パーフェクト -->
+  <div class="card streak hidden" id="streakCard">
+    <div class="streak-fire" id="streakIcon">🔥</div>
+    <div>
+      <div class="streak-num" id="streakNum"></div>
+      <div class="streak-text" id="streakText"></div>
+    </div>
+  </div>
+
+  <!-- 打刻 -->
   <div class="card">
     <h2>出退勤打刻</h2>
     <div class="status" id="statusBox"></div>
-    <div class="today-state" id="todayState" style="display:none;"></div>
-    <button class="btn btn-in" id="checkInBtn">出 勤</button>
-    <button class="btn btn-out" id="checkOutBtn">退 勤</button>
+    <div class="today-state hidden" id="todayState"></div>
+    <button class="btn btn-in" id="checkInBtn" type="button">出 勤</button>
+    <button class="btn btn-out" id="checkOutBtn" type="button">退 勤</button>
     <div class="gps-info" id="gpsInfo">※ボタンを押すとGPSを取得して自動で記録します</div>
+    <div class="last-info" id="lastInfo"></div>
+    <div class="center" style="margin-top:8px;">
+      <button class="link-btn" id="declareBtn" type="button">打刻を丸一日忘れた日を申告する</button>
+    </div>
+  </div>
+
+  <!-- アルコールチェック（サーバーがv4のときだけ表示） -->
+  <div class="card hidden" id="alcCard">
+    <h2>🍺 アルコールチェック（車を運転する日）</h2>
+    <div class="alc-row"><span>運転前</span><span id="alcBefore" class="yet">— 未実施</span></div>
+    <div class="alc-row"><span>運転後</span><span id="alcAfter" class="yet">— 未実施</span></div>
+    <div class="alc-btns">
+      <button class="btn btn-alc" id="alcBeforeBtn" type="button">運転前のチェック</button>
+      <button class="btn btn-alc" id="alcAfterBtn" type="button">運転後のチェック</button>
+    </div>
+    <div class="note" style="line-height:1.6;">仕事で車を運転する日は、運転する前（家を出る前）にチェックしてください。出勤・退勤の打刻のときにも確認します。</div>
+  </div>
+
+  <!-- 今日のおみくじ -->
+  <div class="card hidden" id="omikujiCard">
+    <h2>今日の安全おみくじ</h2>
+    <div class="omikuji-mini">
+      <div class="rank" id="omikujiRank"></div>
+      <div class="msg" id="omikujiMsg"></div>
+      <button class="link-btn" id="omikujiAgainBtn" type="button">見る</button>
+    </div>
   </div>
 
   <div class="card">
     <h2>本日の記録</h2>
     <div class="history" id="historyList">
-      <div style="text-align:center; color:#aaa; padding:20px; font-size:13px;">記録がありません</div>
+      <div class="empty">本日の記録はまだありません</div>
     </div>
-    <button class="btn btn-secondary" id="clearHistoryBtn">履歴をクリア（端末内のみ）</button>
+    <button class="btn btn-secondary" id="clearHistoryBtn" type="button">履歴をクリア（端末内のみ）</button>
   </div>
 
   <div class="config-toggle">
@@ -171,22 +324,30 @@
   <div class="card hidden" id="aboutCard">
     <h2>使い方</h2>
     <ol style="font-size:13px; color:#555; padding-left:20px; line-height:1.8;">
-      <li>初回のみ「基本設定」で氏名を入力し保存（その後はロックされ変更できません）</li>
-      <li>現場到着時に「出勤」ボタンを押す</li>
-      <li>確認画面で「OK」を押すとGPSを取得して記録されます</li>
-      <li>「出勤を記録しました」と出れば完了</li>
-      <li>退勤時も同様に「退勤」ボタンを押す</li>
+      <li>初回のみ「基本設定」で氏名・会社・職種を入れて保存（その後はロックされ、変更は管理者が行います）</li>
+      <li>仕事を始めるときに「出勤」ボタンを押す</li>
+      <li>仕事で車を運転する日は、アルコール検知器で測り、顔と表示を一緒に撮影して送ります</li>
+      <li>GPS位置が取得され、自動でサーバーに記録される</li>
+      <li>出勤すると、その日の「安全おみくじ」が引けます</li>
+      <li>仕事が終わったら「退勤」ボタンを押す</li>
     </ol>
-    <p style="font-size:12px; color:#888; margin-top:10px;">
-      ※位置情報の利用許可が必要です。<br>
-      ※電波が悪く送信に失敗した場合は、記録欄の「再送信」ボタンで送り直せます。<br>
-      ※氏名の変更は管理者にご相談ください（解除コードが必要です）。<br>
-      ※移動中（車・自転車など）は打刻できません。現場で停止してから操作してください。<br>
-      ※既に打刻済みの日は「打ち直す」確認が出ます。前の打刻は履歴に残り、集計は最新の打刻で更新されます。
+    <p style="font-size:12px; color:#888; margin-top:10px; line-height:1.7;">
+      ※前回の打刻を忘れていた場合は、次に打刻するときに時刻を入れてから進みます。<br>
+      ※自分で入れた時刻は「本人修正」として記録され、管理者が確認します。<br>
+      ※修正なしで打刻を続けると「連続パーフェクト」の日数が伸びます。<br>
+      ※移動中（車・自転車など）は打刻できません。止まってから操作してください。<br>
+      ※同じ日にもう一度押すと「打ち直しますか？」と確認が出ます。<br>
+      ※アルコールが検知されたときは運転せず、すぐ管理者に電話してください。<br>
+      ※位置情報とカメラの利用許可が必要です。<br>
+      ※電波が悪く送信に失敗した場合は、記録欄の「再送信」ボタンで送り直せます。
     </p>
   </div>
 
-  <footer>v2.3 二度押し防止・打ち直し対応</footer>
+  <footer>v4.0 アルコールチェック・打刻もれ修正・安全おみくじ対応</footer>
+</div>
+
+<div class="overlay hidden" id="overlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modal"></div>
 </div>
 
 <script>
@@ -195,147 +356,212 @@
 
   // ====================================================
   // 【管理者設定】下の '' の中にGASウェブアプリのURLを貼ると、
-  // 社員はサーバーURLを入力しなくても使えるようになります。
-  // 例： var DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfy.../exec';
+  //  社員はサーバーURLを入力しなくても使えるようになります。
+  //  例： var DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfy.../exec';
   // ====================================================
   var DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzofI-npTSJu7g9Nxz8mibImeUeHKfbNjwTVfMqsBi3ka5tQm8LN1PT8FmECuVSl7j8/exec';
 
-  // ====================================================
-  // 【管理者設定】登録ロック解除コード（4桁の数字など）
-  // 社員が一度名前を登録すると編集できなくなります。
-  // 解除には下のコードが必要なので、管理者のみが知る番号にしてください。
-  // 例： var ADMIN_UNLOCK_CODE = '4827';
-  // ====================================================
+  // 【管理者設定】会社と職種の選択肢（増やす・直すときはここを書き換えます）
+  //  ※「警備員」以外の職種は、打刻の修正に管理者の承認が必要になります（GAS側で判定）
+  var COMPANIES = ['越前警備', '大協建設', '冠光', 'シゼント'];
+  var JOBS = ['警備員', '現場監督', '作業員', '事務・その他'];
+  var REASONS = ['押し忘れ', '電波が悪かった', 'スマホ忘れ・電池切れ', 'その他'];
+
+  // 【管理者設定】登録ロック解除コード（管理者だけが知る番号）
   var ADMIN_UNLOCK_CODE = '2580';
 
-  // ====================================================
-  // 【管理者設定】移動中ブロックのしきい値（m/s）
-  // この速度を超えるときは出退勤ボタンを押しても記録しません。
-  // 目安: 1.5 ≒ 5km/h（ゆっくり歩行） / 2.5 ≒ 9km/h（早歩き）
-  //       3.0 ≒ 11km/h（小走り） / 5.0 ≒ 18km/h（自転車）
-  // 車・自転車を確実に止めるには 2.5〜3.0 を推奨
-  // ====================================================
+  // 【管理者設定】移動中ブロックのしきい値（m/s）。これより速いと打刻しません
+  //  目安: 1.5 ≒ 5km/h（ゆっくり歩行） / 2.5 ≒ 9km/h（早歩き） / 5.0 ≒ 18km/h（自転車）
   var MOVING_SPEED_THRESHOLD = 2.5;
 
-  // ========== 保存キー ==========
+  // 【管理者設定】アルコールが検知されたときの連絡先
+  var ADMIN_NAME = '梅田';
+  var ADMIN_TEL = '090-2126-3439';
+
+  var PHOTO_MAX_PX = 1024;       // 送る写真の長い辺（ピクセル）
+  var PHOTO_MAX_AGE_MIN = 10;    // これより古い写真は使えない（その場で撮影させる）
+  var REDO_MAX_MIN = 12 * 60;    // 同じボタンをこの時間内にもう一度押したら「打ち直し」の確認
+  var LONG_SHIFT_MIN = 18 * 60; // 出勤からこの時間を超えた退勤は、押し忘れかどうかを確認
+  var DECLARE_DAYS = 35;        // 丸一日忘れた日の申告は、この日数前まで
+
+  // ========== 保存キー（v2の設定・履歴をそのまま引き継ぎます） ==========
   var STORAGE_KEY = 'timecard_settings_v2';
   var HISTORY_KEY = 'timecard_history_v2';
+  var STATE_KEY = 'timecard_state_v3';
+  var OMIKUJI_KEY = 'timecard_omikuji_v3';
+  var ALC_KEY = 'timecard_alcohol_v4';
+  var VEHICLE_KEY = 'timecard_vehicle_v4';
 
-  function loadSettings() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
-    catch (e) { return {}; }
+  function readJson(key, fallback) {
+    try {
+      var v = JSON.parse(localStorage.getItem(key));
+      return (v === null || v === undefined) ? fallback : v;
+    } catch (e) { return fallback; }
   }
-  function saveSettings(s) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
-  function loadHistory() {
-    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
-    catch (e) { return []; }
+  function writeJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
   }
-  function saveHistory(h) { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+  function loadSettings() { return readJson(STORAGE_KEY, {}); }
+  function saveSettings(s) { writeJson(STORAGE_KEY, s); }
+  function loadHistory() { return readJson(HISTORY_KEY, []); }
+  function saveHistory(h) { writeJson(HISTORY_KEY, h); }
+  function loadState() { return readJson(STATE_KEY, {}); }
+  function saveState(s) { writeJson(STATE_KEY, s); }
 
-  // ========== 初期表示 ==========
-  var settings = loadSettings();
-  document.getElementById('employeeName').value = settings.name || '';
-  document.getElementById('employeeId').value = settings.empId || '';
-  document.getElementById('webappUrl').value = settings.webappUrl || DEFAULT_WEBAPP_URL || '';
+  // ========== 小道具 ==========
+  function $(id) { return document.getElementById(id); }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  var DAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
-  // ========== 登録ロック制御 ==========
-  function applyLockState() {
+  function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function fmtTs(d) {
+    return fmtDate(d) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function parseTs(ts) {
+    var m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(String(ts || ''));
+    if (!m) return null;
+    return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  }
+  function parseDate(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+  function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+  // 例：'2026-11-10 08:01:00' → '11/10(火) 08:01'
+  function jpDateTime(ts) {
+    var d = parseTs(ts);
+    if (!d) return String(ts || '');
+    return (d.getMonth() + 1) + '/' + d.getDate() + '(' + DAYS[d.getDay()] + ') ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function jpDate(dateStr) {
+    var d = parseDate(dateStr);
+    if (!d) return dateStr;
+    return (d.getMonth() + 1) + '/' + d.getDate() + '(' + DAYS[d.getDay()] + ')';
+  }
+  function typeLabel(t) { return t === 'in' ? '出勤' : '退勤'; }
+
+  // 画面の部品を作る
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(k) {
+        if (k === 'text') node.textContent = attrs[k];
+        else if (k === 'cls') node.className = attrs[k];
+        else if (k === 'on') Object.keys(attrs.on).forEach(function(ev) { node.addEventListener(ev, attrs.on[ev]); });
+        else node.setAttribute(k, attrs[k]);
+      });
+    }
+    (children || []).forEach(function(c) { if (c) node.appendChild(c); });
+    return node;
+  }
+
+  // ========== 設定画面 ==========
+  function fillSelect(sel, list, placeholder) {
+    sel.innerHTML = '';
+    sel.appendChild(el('option', { value: '', text: placeholder }));
+    list.forEach(function(v) { sel.appendChild(el('option', { value: v, text: v })); });
+  }
+  function getUrl() {
     var s = loadSettings();
-    var isLocked = !!(s.name && s.name.trim());
-    var nameInput = document.getElementById('employeeName');
-    var idInput = document.getElementById('employeeId');
-    var urlInput = document.getElementById('webappUrl');
-    var saveBtn = document.getElementById('saveSettingsBtn');
-    var unlockLink = document.getElementById('unlockLink');
-    var regStatus = document.getElementById('regStatus');
-    var regText = document.getElementById('regStatusText');
-    if (isLocked) {
-      nameInput.readOnly = true;
-      idInput.readOnly = true;
-      urlInput.readOnly = true;
-      saveBtn.style.display = 'none';
-      unlockLink.style.display = 'inline-block';
-      regStatus.style.display = 'block';
-      regText.textContent = ' 登録済み：' + s.name +
-        (s.empId ? '（' + s.empId + '）' : '') + ' — この端末はロックされています';
-    } else {
-      nameInput.readOnly = false;
-      idInput.readOnly = false;
-      urlInput.readOnly = false;
-      saveBtn.style.display = 'block';
-      unlockLink.style.display = 'none';
-      regStatus.style.display = 'none';
+    return (s.webappUrl || DEFAULT_WEBAPP_URL || '').trim();
+  }
+  function settingsComplete(s) { return !!(s && s.name && s.company && s.jobType && getUrl()); }
+
+  var unlocked = false; // 管理者コードで一時的にロックを外しているか
+
+  function renderSettings(forceEdit) {
+    var s = loadSettings();
+    $('employeeName').value = s.name || '';
+    $('employeeId').value = s.empId || '';
+    $('company').value = s.company || '';
+    $('jobType').value = s.jobType || '';
+    $('webappUrl').value = s.webappUrl || DEFAULT_WEBAPP_URL || '';
+
+    // 一度登録した名前はロック（なりすまし防止）。会社・職種は未登録のときだけ選べる
+    var locked = !!s.name && !unlocked;
+    $('employeeName').readOnly = locked;
+    $('employeeId').readOnly = locked;
+    $('webappUrl').readOnly = locked;
+    $('company').disabled = locked && !!s.company;
+    $('jobType').disabled = locked && !!s.jobType;
+    $('lockNote').classList.toggle('hidden', !locked);
+    $('lockNote').textContent = '🔒 登録済み：' + (s.name || '') + (s.empId ? '（' + s.empId + '）' : '');
+    $('unlockWrap').classList.toggle('hidden', !locked);
+
+    var done = settingsComplete(s) && !forceEdit;
+    $('settingCard').classList.toggle('hidden', done);
+    $('userCard').classList.toggle('hidden', !done);
+    if (done) {
+      $('userName').textContent = '👤 ' + s.name;
+      $('userSub').textContent = s.company + '・' + s.jobType + (s.empId ? '（' + s.empId + '）' : '');
+    } else if (s.name && (!s.company || !s.jobType)) {
+      showBox('settingStatus', '会社と職種を選んで「設定を保存」を押してください', 'info');
     }
   }
-  applyLockState();
 
-  // 管理者解除リンク
-  document.getElementById('unlockLink').addEventListener('click', function(e) {
-    e.preventDefault();
-    var code = prompt('管理者解除コードを入力してください');
-    if (code === null) return;
-    if (code.trim() === ADMIN_UNLOCK_CODE) {
-      // 一時的にロック解除（設定保存で再ロック）
-      document.getElementById('employeeName').readOnly = false;
-      document.getElementById('employeeId').readOnly = false;
-      document.getElementById('webappUrl').readOnly = false;
-      document.getElementById('saveSettingsBtn').style.display = 'block';
-      document.getElementById('unlockLink').style.display = 'none';
-      showStatus('ロックを一時解除しました。変更後「設定を保存」を押すと再ロックされます', 'info');
-    } else {
-      showStatus('解除コードが違います', 'error');
-    }
-  });
+  // 管理者コードでロックを外す
+  function askUnlock() {
+    var code = el('input', { type: 'password', id: 'unlockCode', inputmode: 'numeric', autocomplete: 'off' });
+    var err = el('div', { cls: 'err', id: 'unlockErr' });
+    openModal([
+      el('h3', { text: '登録の変更（管理者）' }),
+      el('p', { cls: 'lead', text: '管理者の解除コードを入れてください。' }),
+      el('div', { cls: 'field' }, [code]),
+      err,
+      el('button', { cls: 'btn btn-main', type: 'button', id: 'unlockOk', text: 'ロックを外す', on: { click: function() {
+        if (code.value.trim() !== ADMIN_UNLOCK_CODE) { err.textContent = '解除コードが違います'; return; }
+        closeModal();
+        unlocked = true;
+        renderSettings(true);
+        showBox('settingStatus', 'ロックを一時解除しました。変更して「設定を保存」を押すと、またロックされます', 'info');
+      } } }),
+      el('button', { cls: 'btn btn-secondary', type: 'button', text: 'やめる', on: { click: closeModal } })
+    ]);
+  }
 
   // ========== 時計 ==========
-  function pad(n) { return String(n).padStart(2, '0'); }
   function updateClock() {
     var now = new Date();
-    var days = ['日','月','火','水','木','金','土'];
-    document.getElementById('dateDisplay').textContent =
-      now.getFullYear() + '年' + (now.getMonth()+1) + '月' + now.getDate() + '日(' + days[now.getDay()] + ')';
-    document.getElementById('clockDisplay').textContent =
+    $('dateDisplay').textContent =
+      now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日(' + DAYS[now.getDay()] + ')';
+    $('clockDisplay').textContent =
       pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
   }
-  updateClock();
-  setInterval(updateClock, 1000);
 
   // ========== ステータス表示 ==========
-  function showStatus(msg, type) {
-    var box = document.getElementById('statusBox');
+  function showBox(id, msg, type) {
+    var box = $(id);
     box.textContent = msg;
     box.className = 'status show ' + (type || 'info');
   }
-  function hideStatus() {
-    document.getElementById('statusBox').className = 'status';
+  function showStatus(msg, type) { showBox('statusBox', msg, type); }
+  function hideStatus() { $('statusBox').className = 'status'; }
+
+  // ========== モーダル ==========
+  function openModal(children) {
+    var m = $('modal');
+    m.innerHTML = '';
+    children.forEach(function(c) { if (c) m.appendChild(c); });
+    $('overlay').classList.remove('hidden');
+    m.scrollTop = 0;
+  }
+  function closeModal() {
+    $('overlay').classList.add('hidden');
+    $('modal').innerHTML = '';
   }
 
-  // ========== 設定保存 ==========
-  document.getElementById('saveSettingsBtn').addEventListener('click', function() {
-    var name = document.getElementById('employeeName').value.trim();
-    var empId = document.getElementById('employeeId').value.trim();
-    var webappUrl = document.getElementById('webappUrl').value.trim();
-    if (!name) { alert('社員名を入力してください'); return; }
-    if (!webappUrl) { alert('サーバーURLを入力してください（管理者にご確認ください）'); return; }
-    saveSettings({ name: name, empId: empId, webappUrl: webappUrl });
-    applyLockState();
-    showStatus('設定を保存しました。この端末は「' + name + '」として登録されました', 'success');
-    setTimeout(hideStatus, 3000);
-  });
-
-  // ========== 距離計算（ハバーシン公式） ==========
+  // ========== GPS取得 ==========
   function haversineMeters(lat1, lng1, lat2, lng2) {
-    var R = 6371000; // 地球半径(m)
+    var R = 6371000;
     var toRad = function(d) { return d * Math.PI / 180; };
     var dLat = toRad(lat2 - lat1);
     var dLng = toRad(lng2 - lng1);
-    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  // ========== GPS取得（速度判定付き） ==========
+  // 位置と速度を取る（端末が速度を返さないときは、2.5秒あけて2回測って計算）
   function getLocation() {
     return new Promise(function(resolve, reject) {
       if (!navigator.geolocation) {
@@ -350,310 +576,1153 @@
         reject(new Error(msg));
       }
       var opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
-
       navigator.geolocation.getCurrentPosition(function(pos1) {
         var t1 = Date.now();
-        var loc1 = {
-          lat: pos1.coords.latitude,
-          lng: pos1.coords.longitude,
-          accuracy: Math.round(pos1.coords.accuracy),
-          speed: 0
-        };
+        var loc1 = { lat: pos1.coords.latitude, lng: pos1.coords.longitude,
+                     accuracy: Math.round(pos1.coords.accuracy), speed: 0 };
         var devSpeed = pos1.coords.speed;
-        // 端末が速度を返す場合はそれを採用
         if (devSpeed !== null && devSpeed !== undefined && !isNaN(devSpeed) && devSpeed >= 0) {
           loc1.speed = devSpeed;
           resolve(loc1);
           return;
         }
-        // 端末が速度を返さない場合：2.5秒後にもう1点取って距離から速度算出
         setTimeout(function() {
           navigator.geolocation.getCurrentPosition(function(pos2) {
-            var t2 = Date.now();
-            var loc2 = {
-              lat: pos2.coords.latitude,
-              lng: pos2.coords.longitude,
-              accuracy: Math.round(pos2.coords.accuracy),
-              speed: 0
-            };
-            var rawDist = haversineMeters(loc1.lat, loc1.lng, loc2.lat, loc2.lng);
-            // GPS誤差ぶんを差し引いた実効移動距離
-            var buffer = (loc1.accuracy + loc2.accuracy) * 0.5;
-            var effective = Math.max(0, rawDist - buffer);
-            var elapsedSec = Math.max(0.1, (t2 - t1) / 1000);
-            loc2.speed = effective / elapsedSec;
+            var loc2 = { lat: pos2.coords.latitude, lng: pos2.coords.longitude,
+                         accuracy: Math.round(pos2.coords.accuracy), speed: 0 };
+            var raw = haversineMeters(loc1.lat, loc1.lng, loc2.lat, loc2.lng);
+            var effective = Math.max(0, raw - (loc1.accuracy + loc2.accuracy) * 0.5); // GPSの誤差分を差し引く
+            loc2.speed = effective / Math.max(0.1, (Date.now() - t1) / 1000);
             resolve(loc2);
-          }, function() {
-            // 2点目失敗時は停止扱いで通す
-            resolve(loc1);
-          }, opts);
+          }, function() { resolve(loc1); }, opts);
         }, 2500);
       }, geoErr, opts);
     });
   }
 
-  // ========== サーバー送信 ==========
-  function sendRecord(url, payload) {
-    return fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(result) { return result && result.status === 'ok'; })
-    .catch(function() { return false; });
-  }
-
-  // ========== 本日の打刻状態 ==========
-  // 履歴から「本日 一番早い出勤」と「本日 一番遅い退勤」を取り出す
-  // （集計スクリプトと同じロジック — 打ち直したら最新のもので上書きされる）
-  function getTodayState() {
-    var today = new Date();
-    var todayStr = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
-    var history = loadHistory();
-    var st = { inTime: null, outTime: null };
-    for (var i = 0; i < history.length; i++) {
-      var h = history[i];
-      if (!h.time || h.time.indexOf(todayStr) !== 0) continue;
-      if (h.status !== 'sent') continue; // 送信済のみ「打刻済み」扱い
-      var t = h.time.substring(11, 16); // HH:MM
-      if (h.type === 'in') {
-        if (!st.inTime || t < st.inTime) st.inTime = t;
-      } else if (h.type === 'out') {
-        if (!st.outTime || t > st.outTime) st.outTime = t;
-      }
-    }
-    return st;
-  }
-
-  // 本日の打刻状態バーとボタンの見た目を更新
-  function updateTodayStateDisplay() {
-    var st = getTodayState();
-    var box = document.getElementById('todayState');
-    var inBtn = document.getElementById('checkInBtn');
-    var outBtn = document.getElementById('checkOutBtn');
-
-    if (st.inTime || st.outTime) {
-      var inHtml = st.inTime
-        ? '<span class="val done">🟢 ' + st.inTime + ' 済み</span>'
-        : '<span class="val yet">— 未打刻</span>';
-      var outHtml = st.outTime
-        ? '<span class="val done">🔴 ' + st.outTime + ' 済み</span>'
-        : '<span class="val yet">— 未打刻</span>';
-      box.innerHTML =
-        '<div class="row"><span class="lbl">本日の出勤</span>' + inHtml + '</div>' +
-        '<div class="row"><span class="lbl">本日の退勤</span>' + outHtml + '</div>';
-      box.style.display = 'block';
-    } else {
-      box.style.display = 'none';
-    }
-
-    // ボタンの見た目を状態で切り替え
-    if (st.inTime) {
-      inBtn.textContent = '出勤 打刻済み ✓（打ち直す）';
-      inBtn.classList.add('punched');
-    } else {
-      inBtn.textContent = '出 勤';
-      inBtn.classList.remove('punched');
-    }
-    if (st.outTime) {
-      outBtn.textContent = '退勤 打刻済み ✓（打ち直す）';
-      outBtn.classList.add('punched');
-    } else {
-      outBtn.textContent = '退 勤';
-      outBtn.classList.remove('punched');
-    }
-  }
-
-  // ========== 打刻処理 ==========
-  function punch(type) {
-    var s = loadSettings();
-    var url = (s.webappUrl || DEFAULT_WEBAPP_URL || '').trim();
-    if (!s.name) { showStatus('先に社員名を設定してください', 'error'); return; }
-    if (!url) { showStatus('サーバーURLが未設定です。管理者にご確認ください', 'error'); return; }
-
-    // 二度押し・誤タップ防止：本日の状態を見て確認ダイアログを分ける
-    var typeLabel = type === 'in' ? '出勤' : '退勤';
-    var st = getTodayState();
-    var already = type === 'in' ? st.inTime : st.outTime;
-    var confirmMsg;
-    if (already) {
-      confirmMsg =
-        '本日は既に ' + typeLabel + ' を ' + already + ' に打刻済みです。\n\n' +
-        '打ち直しますか？\n' +
-        '（前の打刻は履歴に残りますが、集計は最新の打刻で更新されます）';
-    } else {
-      confirmMsg = typeLabel + ' 打刻しますか？\n現在地のGPSを取得して記録します。';
-    }
-    if (!confirm(confirmMsg)) return;
-
-    document.getElementById('checkInBtn').disabled = true;
-    document.getElementById('checkOutBtn').disabled = true;
-    showStatus('GPSを取得中...しばらくお待ちください', 'info');
-    document.getElementById('gpsInfo').textContent = '取得中...';
-
-    getLocation().then(function(loc) {
-      var speedKmh = (loc.speed || 0) * 3.6;
-
-      // 移動中チェック
-      if (loc.speed > MOVING_SPEED_THRESHOLD) {
-        document.getElementById('gpsInfo').innerHTML =
-          '移動中（約' + speedKmh.toFixed(1) + 'km/h）— 打刻ブロック';
-        showStatus('移動中のため打刻できません（推定 約' + speedKmh.toFixed(1) +
-          'km/h）。安全な場所で停止してから再度お試しください', 'error');
-        return; // ここで打ち切り、履歴にも残さない
-      }
-
-      var now = new Date();
-      var ts = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + ' ' +
-               pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-      var mapsUrl = 'https://www.google.com/maps?q=' + loc.lat + ',' + loc.lng;
-
-      var payload = {
-        type: typeLabel,
-        name: s.name,
-        empId: s.empId || '',
-        timestamp: ts,
-        lat: loc.lat,
-        lng: loc.lng,
-        accuracy: loc.accuracy,
-        mapsUrl: mapsUrl
-      };
-
-      document.getElementById('gpsInfo').innerHTML =
-        '位置取得成功: ' + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6) +
-        ' (±' + loc.accuracy + 'm, ' + speedKmh.toFixed(1) + 'km/h)';
-      showStatus(typeLabel + 'を記録中...', 'info');
-
-      return sendRecord(url, payload).then(function(ok) {
-        var history = loadHistory();
-        history.unshift({
-          localId: Date.now(),
-          type: type,
-          name: s.name,
-          empId: s.empId || '',
-          time: ts,
-          lat: loc.lat,
-          lng: loc.lng,
-          accuracy: loc.accuracy,
-          mapsUrl: mapsUrl,
-          status: ok ? 'sent' : 'failed'
-        });
-        saveHistory(history.slice(0, 50));
-        renderHistory();
-        updateTodayStateDisplay();
-        if (ok) {
-          showStatus(typeLabel + 'を記録しました', 'success');
-        } else {
-          showStatus('送信に失敗しました。電波の良い場所で記録欄の「再送信」を押してください', 'error');
-        }
-      });
-    }).catch(function(err) {
-      showStatus(err.message, 'error');
-      document.getElementById('gpsInfo').textContent = '※ボタンを押すとGPSを取得して自動で記録します';
-    }).then(function() {
-      // 連打・誤タップ防止のクールダウン（3秒）
-      setTimeout(function() {
-        document.getElementById('checkInBtn').disabled = false;
-        document.getElementById('checkOutBtn').disabled = false;
-      }, 3000);
+  // ========== サーバー通信 ==========
+  function withTimeout(promise, ms) {
+    return new Promise(function(resolve, reject) {
+      var timer = setTimeout(function() { reject(new Error('timeout')); }, ms);
+      promise.then(function(v) { clearTimeout(timer); resolve(v); },
+                   function(e) { clearTimeout(timer); reject(e); });
     });
   }
 
-  document.getElementById('checkInBtn').addEventListener('click', function() { punch('in'); });
-  document.getElementById('checkOutBtn').addEventListener('click', function() { punch('out'); });
+  // 送信して、サーバーの返事（オブジェクト）を返す。届かなければ null
+  function postRecord(payload) {
+    var url = getUrl();
+    if (!url) return Promise.resolve(null);
+    return withTimeout(fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(function(res) { return res.json(); }), 30000)
+      .catch(function() { return null; });
+  }
+
+  // 最後の打刻・連続日数をサーバーに問い合わせる。届かなければ null
+  function fetchStatus() {
+    var s = loadSettings();
+    var url = getUrl();
+    if (!s.name || !url) return Promise.resolve(null);
+    var q = url + (url.indexOf('?') >= 0 ? '&' : '?') +
+      'action=status&name=' + encodeURIComponent(s.name) + '&_=' + Date.now();
+    return withTimeout(fetch(q).then(function(res) { return res.json(); }), 12000)
+      .then(function(r) {
+        // v3のサーバーだけが streak を返す（古いサーバーのときは打刻もれチェックをしない）
+        if (r && r.status === 'ok' && typeof r.streak === 'number') return r;
+        return null;
+      })
+      .catch(function() { return null; });
+  }
+
+  // サーバーの返事を覚えておく
+  function applyServer(r) {
+    if (!r || r.status !== 'ok') return;
+    var s = loadSettings();
+    var st = loadState();
+    if (st.name !== s.name) st = {};
+    if (typeof r.streak === 'number') {
+      st.serverV3 = true;
+      st.serverV = r.v || 3;
+      st.name = s.name;
+      st.streak = r.streak;
+      st.monthFix = r.monthFix || 0;
+      st.last = r.last || null;
+    }
+    if (r.alcohol) {
+      st.serverV = Math.max(st.serverV || 0, r.v || 4);
+      st.name = s.name;
+      st.alcohol = r.alcohol;
+      st.alcoholDate = fmtDate(new Date());
+    }
+    saveState(st);
+    renderStreak();
+    renderLast();
+    renderAlcohol();
+  }
+
+  // ========== 最後の打刻（サーバーと端末内の新しい方） ==========
+  function localLast() {
+    var s = loadSettings();
+    var best = null;
+    loadHistory().forEach(function(h) {
+      if (h.name !== s.name || h.status === 'rejected') return;
+      if (!best || h.time > best.timestamp) best = { type: typeLabel(h.type), timestamp: h.time };
+    });
+    return best;
+  }
+  function currentLast() {
+    var s = loadSettings();
+    var st = loadState();
+    var server = (st.name === s.name && st.last && st.last.timestamp) ? st.last : null;
+    var local = localLast();
+    if (server && local) return local.timestamp > server.timestamp ? local : server;
+    return server || local;
+  }
+
+  // ========== 打刻もれの判定 ==========
+  // 返り値：{ dup: 記録済みの案内文 } または { missing: [修正が必要な打刻], askLong: 確認が必要か }
+  // 返り値：{ redo: 打ち直しの確認が必要な前回時刻, missing: [修正が必要な打刻], askLong: 確認が必要か }
+  function analyze(type, last, now) {
+    var res = { redo: '', missing: [], askLong: false };
+    var lastDate = last ? parseTs(last.timestamp) : null;
+    var elapsed = lastDate ? (now.getTime() - lastDate.getTime()) / 60000 : null;
+
+    if (type === 'in') {
+      if (last && last.type === '出勤') {
+        if (elapsed < REDO_MAX_MIN) res.redo = last.timestamp;
+        else res.missing.push({ type: '退勤', after: last.timestamp, before: now });
+      }
+    } else {
+      if (!last || last.type === '退勤') {
+        if (last && elapsed < REDO_MAX_MIN) res.redo = last.timestamp;
+        else res.missing.push({ type: '出勤', after: last ? last.timestamp : null, before: now });
+      } else if (elapsed > LONG_SHIFT_MIN) {
+        res.askLong = true;
+      }
+    }
+    return res;
+  }
+
+  // サーバーがv3より古いときの判定（v2.3と同じく、端末内の今日の記録だけで打ち直しを確認）
+  function analyzeLocal(type) {
+    var t = getTodayState();
+    var already = type === 'in' ? t.inTs : t.outTs;
+    return { redo: already || '', missing: [], askLong: false };
+  }
+
+  // 出勤から長時間たっている退勤：押し忘れか、ずっと勤務していたかを本人に聞く
+  // 返り値：修正が必要な打刻の配列（勤務していた→空配列、やめる→null）
+  function askLongShift(last, now) {
+    return new Promise(function(resolve) {
+      var hours = Math.floor((now.getTime() - parseTs(last.timestamp).getTime()) / 3600000);
+      openModal([
+        el('h3', { text: '確認してください' }),
+        el('div', { cls: 'warn', text: '前回の出勤（' + jpDateTime(last.timestamp) + '）から ' + hours + '時間たっています。' }),
+        el('p', { cls: 'lead', text: 'どちらですか？' }),
+        el('button', { cls: 'btn btn-main', type: 'button', text: '前回の退勤を押し忘れた',
+          on: { click: function() {
+            closeModal();
+            resolve([
+              { type: '退勤', after: last.timestamp, before: now },
+              { type: '出勤', after: last.timestamp, before: now, afterPrev: true }
+            ]);
+          } } }),
+        el('button', { cls: 'btn btn-secondary', type: 'button', text: 'ずっと勤務していた',
+          on: { click: function() { closeModal(); resolve([]); } } }),
+        el('button', { cls: 'btn btn-secondary', type: 'button', text: 'やめる',
+          on: { click: function() { closeModal(); resolve(null); } } })
+      ]);
+    });
+  }
+
+  // 修正で選べる日付（退勤の修正＝出勤した日か翌日、出勤の修正＝今日か前日）
+  function candidateDates(spec) {
+    var before = new Date(spec.before.getFullYear(), spec.before.getMonth(), spec.before.getDate());
+    var afterD = spec.after ? parseTs(spec.after) : null;
+    var afterDay = afterD ? new Date(afterD.getFullYear(), afterD.getMonth(), afterD.getDate()) : null;
+    var list = [];
+    if (spec.type === '退勤' && afterDay) {
+      list.push(afterDay);
+      var next = addDays(afterDay, 1);
+      if (next.getTime() <= before.getTime()) list.push(next);
+    } else {
+      list.push(before);
+      var prev = addDays(before, -1);
+      if (!afterDay || prev.getTime() >= afterDay.getTime()) list.push(prev);
+    }
+    return list.map(fmtDate);
+  }
+
+  // 理由のボタン
+  function reasonChips(onPick) {
+    var wrap = el('div', { cls: 'chips' });
+    REASONS.forEach(function(r) {
+      wrap.appendChild(el('button', { cls: 'chip', type: 'button', text: r, on: { click: function(ev) {
+        Array.prototype.forEach.call(wrap.children, function(c) { c.classList.remove('on'); });
+        ev.currentTarget.classList.add('on');
+        onPick(r);
+      } } }));
+    });
+    return wrap;
+  }
+
+  // 未入力の打刻を1件、本人に入力してもらう
+  // 返り値：{ ts, reason }（やめたときは null）
+  function askFix(spec, index, total) {
+    return new Promise(function(resolve) {
+      var dates = candidateDates(spec);
+      var reason = '';
+      var dateSel = el('select', { id: 'fixDate' });
+      dates.forEach(function(d) { dateSel.appendChild(el('option', { value: d, text: jpDate(d) })); });
+      var timeInput = el('input', { type: 'time', id: 'fixTime' });
+      var err = el('div', { cls: 'err', id: 'fixErr' });
+
+      var what = spec.after
+        ? '前回の記録（' + jpDateTime(spec.after) + '）のあとの「' + spec.type + '」が未入力です。'
+        : '今回の「' + spec.type + '」が未入力です。';
+
+      function submit() {
+        if (!timeInput.value) { err.textContent = '時刻を入れてください'; return; }
+        if (!reason) { err.textContent = '理由を選んでください'; return; }
+        var ts = dateSel.value + ' ' + timeInput.value.substring(0, 5) + ':00';
+        var d = parseTs(ts);
+        if (!d) { err.textContent = '時刻が正しくありません'; return; }
+        if (spec.after && ts <= spec.after) {
+          err.textContent = '前回の記録（' + jpDateTime(spec.after) + '）より後の時刻にしてください';
+          return;
+        }
+        if (d.getTime() >= spec.before.getTime()) {
+          err.textContent = '今より前の時刻にしてください';
+          return;
+        }
+        closeModal();
+        resolve({ ts: ts, reason: reason });
+      }
+
+      openModal([
+        total > 1 ? el('div', { cls: 'step', text: '修正 ' + index + ' / ' + total }) : null,
+        el('h3', { text: '打刻もれがあります' }),
+        el('div', { cls: 'warn', text: what }),
+        el('p', { cls: 'lead', text: '実際に' + spec.type + 'した時刻を入れてください。入れ終わると、今の打刻に進みます。' }),
+        el('div', { cls: 'field' }, [el('label', { for: 'fixDate', text: spec.type + 'した日' }), dateSel]),
+        el('div', { cls: 'field' }, [el('label', { for: 'fixTime', text: spec.type + 'した時刻' }), timeInput]),
+        el('div', { cls: 'field' }, [el('label', { text: '理由' }), reasonChips(function(r) { reason = r; err.textContent = ''; })]),
+        err,
+        el('button', { cls: 'btn btn-main', type: 'button', id: 'fixSubmit', text: 'この内容で修正する', on: { click: submit } }),
+        el('button', { cls: 'btn btn-secondary', type: 'button', id: 'fixCancel', text: 'やめる（打刻しない）',
+          on: { click: function() { closeModal(); resolve(null); } } })
+      ]);
+    });
+  }
+
+  // ========== 記録の送信 ==========
+  function buildItem(kind, type, ts, loc, reason) {
+    var s = loadSettings();
+    return {
+      localId: Date.now() + Math.floor(Math.random() * 1000),
+      createdDate: fmtDate(new Date()),
+      kind: kind,
+      type: type,
+      name: s.name,
+      empId: s.empId || '',
+      company: s.company || '',
+      jobType: s.jobType || '',
+      time: ts,
+      lat: loc ? loc.lat : '',
+      lng: loc ? loc.lng : '',
+      accuracy: loc ? loc.accuracy : '',
+      mapsUrl: loc ? 'https://www.google.com/maps?q=' + loc.lat + ',' + loc.lng : '',
+      reason: reason || '',
+      status: 'failed'
+    };
+  }
+  function toPayload(item) {
+    return {
+      kind: item.kind === 'fix' ? 'fix' : 'punch',
+      type: typeLabel(item.type),
+      name: item.name,
+      empId: item.empId || '',
+      company: item.company || '',
+      jobType: item.jobType || '',
+      timestamp: item.time,
+      lat: item.lat,
+      lng: item.lng,
+      accuracy: item.accuracy,
+      mapsUrl: item.mapsUrl || '',
+      reason: item.reason || '',
+      clientId: item.localId
+    };
+  }
+  // 送信して履歴に残す。返り値：'sent'（記録済）/'failed'（未送信）/'rejected'（受付不可）
+  function sendItem(item) {
+    return postRecord(toPayload(item)).then(function(r) {
+      var message = '';
+      if (r && r.status === 'ok') { item.status = 'sent'; applyServer(r); }
+      else if (r && r.status === 'error') { item.status = 'rejected'; message = r.message || ''; }
+      else { item.status = 'failed'; }
+      var history = loadHistory();
+      var found = false;
+      for (var i = 0; i < history.length; i++) {
+        if (history[i].localId === item.localId) { history[i] = item; found = true; break; }
+      }
+      if (!found) history.unshift(item);
+      saveHistory(history.slice(0, 80));
+      renderHistory();
+      renderLast();
+      return { status: item.status, message: message };
+    });
+  }
+
+  // 修正が必要な打刻を、順番に入力→送信していく。全部終われば true、途中でやめたら false
+  function runFixes(specs) {
+    var i = 0;
+    var prevTs = null;
+    function next() {
+      if (i >= specs.length) return Promise.resolve(true);
+      var spec = specs[i];
+      if (spec.afterPrev && prevTs) spec.after = prevTs;
+      return askFix(spec, i + 1, specs.length).then(function(ans) {
+        if (!ans) return false;
+        prevTs = ans.ts;
+        showStatus('修正を記録中...', 'info');
+        var item = buildItem('fix', spec.type === '出勤' ? 'in' : 'out', ans.ts, null, ans.reason);
+        return sendItem(item).then(function(res) {
+          if (res.status === 'rejected') {
+            showStatus('修正を受け付けられませんでした：' + res.message, 'error');
+            return false;
+          }
+          i++;
+          return next();
+        });
+      });
+    }
+    return next();
+  }
+
+  // ========== 打刻処理 ==========
+  var busy = false;
+  function setBusy(b) {
+    busy = b;
+    $('checkInBtn').disabled = b;
+    $('checkOutBtn').disabled = b;
+    $('alcBeforeBtn').disabled = b;
+    $('alcAfterBtn').disabled = b;
+  }
+
+  // はい／いいえの確認（返り値：true / false）
+  function confirmModal(title, lead, okText, warn) {
+    return new Promise(function(resolve) {
+      openModal([
+        el('h3', { text: title }),
+        warn ? el('div', { cls: 'warn', text: warn }) : null,
+        lead ? el('p', { cls: 'lead', text: lead }) : null,
+        el('button', { cls: 'btn btn-main', type: 'button', id: 'confirmOk', text: okText,
+          on: { click: function() { closeModal(); resolve(true); } } }),
+        el('button', { cls: 'btn btn-secondary', type: 'button', id: 'confirmCancel', text: 'やめる',
+          on: { click: function() { closeModal(); resolve(false); } } })
+      ]);
+    });
+  }
+
+  // 選択肢から1つ選ぶ（返り値：選んだ値、やめたら null）
+  function chooseModal(title, lead, choices) {
+    return new Promise(function(resolve) {
+      var nodes = [el('h3', { text: title }), el('p', { cls: 'lead', text: lead })];
+      choices.forEach(function(c) {
+        nodes.push(el('button', { cls: 'btn ' + (c.cls || 'btn-main'), type: 'button', id: c.id, text: c.text,
+          on: { click: function() { closeModal(); resolve(c.value); } } }));
+      });
+      nodes.push(el('button', { cls: 'btn btn-secondary', type: 'button', id: 'chooseCancel', text: 'やめる',
+        on: { click: function() { closeModal(); resolve(null); } } }));
+      openModal(nodes);
+    });
+  }
+
+  function alcoholEnabled() {
+    var st = loadState();
+    return (st.serverV || 0) >= 4 && st.name === loadSettings().name;
+  }
+
+  // 出勤・退勤のときに、アルコールチェックが要るかを決める
+  // 返り値：'before' / 'after'（チェックが要る）、''（要らない）、null（やめた）
+  function decideAlcohol(type, confirmed) {
+    if (!alcoholEnabled()) return Promise.resolve('');
+    var a = alcoholStatus();
+    var label = typeLabel(type);
+    if (type === 'in') {
+      // 今日の運転前チェックが済んでいる／今日は運転しないと答えている → もう聞かない
+      if (a.before || a.drive === false) {
+        return confirmed ? Promise.resolve('') :
+          confirmModal(label + 'を打刻します', '現在地のGPSを取得して記録します。', label + 'する')
+            .then(function(ok) { return ok ? '' : null; });
+      }
+      return chooseModal(label + 'を打刻します', '今日、仕事で車を運転しますか？（社用車・業務での運転）', [
+        { id: 'driveYes', value: 'before', text: '🚗 運転する（アルコールチェックへ）', cls: 'btn-alc' },
+        { id: 'driveNo', value: 'none', text: '運転しない（そのまま' + label + '）', cls: 'btn-main' }
+      ]).then(function(v) {
+        if (v === null) return null;
+        setLocalAlcohol({ drive: v === 'before' });
+        return v === 'before' ? 'before' : '';
+      });
+    }
+    if (a.after) return Promise.resolve('');
+    if (a.before || a.drive === true) {
+      return confirmModal(label + 'を打刻します', '運転後のアルコールチェックをしてから退勤します。', '🍺 運転後のチェックへ')
+        .then(function(ok) { return ok ? 'after' : null; });
+    }
+    if (a.drive === false) {
+      return confirmed ? Promise.resolve('') :
+        confirmModal(label + 'を打刻します', '現在地のGPSを取得して記録します。', label + 'する')
+          .then(function(ok) { return ok ? '' : null; });
+    }
+    return chooseModal(label + 'を打刻します', '今日、仕事で車を運転しましたか？（社用車・業務での運転）', [
+      { id: 'droveYes', value: 'after', text: '🚗 運転した（アルコールチェックへ）', cls: 'btn-alc' },
+      { id: 'droveNo', value: 'none', text: '運転していない（そのまま' + label + '）', cls: 'btn-main' }
+    ]).then(function(v) {
+      if (v === null) return null;
+      setLocalAlcohol({ drive: v === 'after' });
+      return v === 'after' ? 'after' : '';
+    });
+  }
+
+  function punch(type) {
+    if (busy) return;
+    var s = loadSettings();
+    if (!settingsComplete(s)) {
+      renderSettings(true);
+      showStatus('先に基本設定（氏名・会社・職種）を保存してください', 'error');
+      return;
+    }
+
+    var pressedAt = new Date(); // 打刻時刻はボタンを押した瞬間
+    var label = typeLabel(type);
+    setBusy(true);
+    showStatus('確認中...しばらくお待ちください', 'info');
+    $('gpsInfo').textContent = 'GPSを取得中...';
+
+    // GPS取得（移動中かどうかもここで判定）と、サーバーへの確認を同時に進める
+    var gps = getLocation().then(
+      function(loc) { return { ok: true, loc: loc }; },
+      function(err) { return { ok: false, message: err.message }; }
+    );
+
+    var confirmed = false; // 打ち直し・修正などで、本人がすでに打刻の意思を示したか
+
+    fetchStatus().then(function(r) {
+      if (r) applyServer(r);
+      var st = loadState();
+      var a = st.serverV3 ? analyze(type, currentLast(), pressedAt) : analyzeLocal(type);
+      hideStatus();
+
+      // ① 同じボタンの二度押し → 打ち直すか確認
+      var redoP = Promise.resolve(true);
+      if (a.redo) {
+        redoP = confirmModal('打ち直しますか？', '前の打刻は履歴に残りますが、集計は最新の打刻で更新されます。', '打ち直す',
+          '本日は既に ' + label + ' を ' + jpDateTime(a.redo) + ' に打刻済みです。');
+      }
+      return redoP.then(function(go) {
+        if (!go) return 'stop';
+        if (a.redo) confirmed = true;
+        // ② 打刻もれ → 本人修正
+        var specsP = a.askLong ? askLongShift(currentLast(), pressedAt) : Promise.resolve(a.missing);
+        return specsP.then(function(specs) {
+          if (specs === null) return 'stop';
+          if (specs.length > 0 || a.askLong) confirmed = true;
+          return runFixes(specs).then(function(ok) {
+            if (!ok) {
+              if ($('statusBox').className.indexOf('error') === -1) {
+                showStatus('打刻もれの修正が終わると、打刻できます', 'error');
+              }
+              return 'stop';
+            }
+            // ③ アルコールチェック（運転する人だけ）
+            return decideAlcohol(type, confirmed).then(function(phase) {
+              if (phase === null) return 'stop';
+              if (!phase) {
+                if (confirmed || alcoholEnabled()) return 'go';
+                return confirmModal(label + 'を打刻します', '現在地のGPSを取得して記録します。', label + 'する')
+                  .then(function(ok) { return ok ? 'go' : 'stop'; });
+              }
+              return runAlcoholCheck(phase).then(function(res) {
+                if (res === 'ok') return 'go';
+                if (res === 'detected') {
+                  showStatus('アルコールが検知されたため、' + label + 'は記録していません。管理者の指示に従ってください', 'error');
+                } else {
+                  showStatus('アルコールチェックが終わると、' + label + 'できます', 'error');
+                }
+                return 'stop';
+              });
+            });
+          });
+        });
+      });
+    }).then(function(step) {
+      if (step !== 'go') {
+        if ($('statusBox').className.indexOf('show') === -1) hideStatus();
+        return;
+      }
+      showStatus('GPSを取得中...しばらくお待ちください', 'info');
+      return gps.then(function(g) {
+        if (!g.ok) {
+          showStatus(g.message, 'error');
+          return;
+        }
+        var kmh = (g.loc.speed || 0) * 3.6;
+        // ④ 移動中は打刻しない（運転しながらの操作を防ぐ）
+        if (g.loc.speed > MOVING_SPEED_THRESHOLD) {
+          $('gpsInfo').textContent = '移動中（約' + kmh.toFixed(1) + 'km/h）— 打刻ブロック';
+          showStatus('移動中のため打刻できません（推定 約' + kmh.toFixed(1) +
+            'km/h）。安全な場所で止まってから、もう一度押してください', 'error');
+          return;
+        }
+        $('gpsInfo').textContent =
+          '位置取得成功: ' + g.loc.lat.toFixed(6) + ', ' + g.loc.lng.toFixed(6) +
+          ' (±' + g.loc.accuracy + 'm, ' + kmh.toFixed(1) + 'km/h)';
+        showStatus(label + 'を記録中...', 'info');
+        var item = buildItem('punch', type, fmtTs(pressedAt), g.loc, '');
+        return sendItem(item).then(function(res) {
+          if (res.status === 'sent') {
+            showStatus(label + 'を記録しました', 'success');
+            showReward(type);
+          } else if (res.status === 'rejected') {
+            showStatus('記録できませんでした：' + res.message, 'error');
+          } else {
+            showStatus('送信に失敗しました。電波の良い場所で記録欄の「再送信」を押してください', 'error');
+          }
+        });
+      });
+    }).catch(function() {
+      showStatus('エラーが起きました。もう一度お試しください', 'error');
+    }).then(function() {
+      if ($('gpsInfo').textContent === 'GPSを取得中...') {
+        $('gpsInfo').textContent = '※ボタンを押すとGPSを取得して自動で記録します';
+      }
+      setTimeout(function() { setBusy(false); }, 1200);
+    });
+  }
+
+  // ========== アルコールチェック ==========
+  // 端末に残す今日の状況（サーバーの記録と合わせて使う）
+  function loadLocalAlcohol() {
+    var a = readJson(ALC_KEY, {});
+    if (a.date !== fmtDate(new Date()) || a.name !== loadSettings().name) return {};
+    return a;
+  }
+  function setLocalAlcohol(patch) {
+    var a = loadLocalAlcohol();
+    a.date = fmtDate(new Date());
+    a.name = loadSettings().name;
+    Object.keys(patch).forEach(function(k) { a[k] = patch[k]; });
+    writeJson(ALC_KEY, a);
+  }
+  // 今日の状況：{ before: 'HH:MM'|null, after: 'HH:MM'|null, detected, drive: true/false/undefined }
+  function alcoholStatus() {
+    var st = loadState();
+    var server = (st.alcohol && st.alcoholDate === fmtDate(new Date()) && st.name === loadSettings().name) ? st.alcohol : {};
+    var local = loadLocalAlcohol();
+    return {
+      before: server.before || local.before || null,
+      after: server.after || local.after || null,
+      detected: !!(server.detected || local.detected),
+      drive: (server.before || local.before) ? true : local.drive
+    };
+  }
+  function renderAlcohol() {
+    var show = alcoholEnabled() && settingsComplete(loadSettings());
+    $('alcCard').classList.toggle('hidden', !show);
+    if (!show) return;
+    var a = alcoholStatus();
+    function put(id, v) {
+      $(id).textContent = v ? '✓ ' + v + ' 済み' : (a.drive === false ? '— 今日は運転なし' : '— 未実施');
+      $(id).className = v ? 'done' : 'yet';
+    }
+    put('alcBefore', a.before);
+    put('alcAfter', a.after);
+    if (a.detected) {
+      $('alcAfter').textContent = '⚠️ 検知あり・管理者に連絡';
+      $('alcAfter').className = 'bad';
+    }
+  }
+
+  // 写真を小さくしてJPEGの文字列にする
+  function compressPhoto(file) {
+    return new Promise(function(resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function() {
+        var scale = Math.min(1, PHOTO_MAX_PX / Math.max(img.naturalWidth, img.naturalHeight));
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = function() { URL.revokeObjectURL(url); reject(new Error('写真を読み込めませんでした')); };
+      img.src = url;
+    });
+  }
+
+  // 検知されたときの画面
+  function showDanger(value) {
+    var telNum = ADMIN_TEL.replace(/[^0-9+]/g, '');
+    openModal([
+      el('div', { cls: 'danger' }, [
+        el('span', { text: '⚠️ アルコールが検知されました（' + value + ' mg/L）' }),
+        el('span', { cls: 'big', text: '運転しないでください' }),
+        el('span', { text: 'すぐに' + ADMIN_NAME + 'へ電話してください' })
+      ]),
+      el('a', { cls: 'tel-btn', id: 'telBtn', href: 'tel:' + telNum, text: '📞 ' + ADMIN_NAME + 'に電話する（' + ADMIN_TEL + '）' }),
+      el('p', { cls: 'lead', style: 'margin-top:12px;', text: '打刻は、管理者の指示を受けてから行ってください。管理者にもお知らせが届いています。' }),
+      el('button', { cls: 'btn btn-secondary', type: 'button', id: 'dangerClose', text: '閉じる', on: { click: closeModal } })
+    ]);
+  }
+
+  // アルコールチェックの入力画面
+  // 返り値：'ok'（0.00で記録できた）/ 'detected'（検知）/ null（やめた）
+  function runAlcoholCheck(phase) {
+    return new Promise(function(resolve) {
+      var label = phase === 'before' ? '運転前' : '運転後';
+      var photoData = null;
+      var err = el('div', { cls: 'err', id: 'alcErr' });
+      var fileInput = el('input', { type: 'file', accept: 'image/*', capture: 'user', id: 'alcPhoto', cls: 'hidden' });
+      var preview = el('img', { cls: 'photo-preview hidden', id: 'alcPreview', alt: '撮影した写真' });
+      var photoBtn = el('button', { cls: 'btn photo-btn', type: 'button', id: 'alcPhotoBtn', text: '📷 顔と検知器を一緒に撮る',
+        on: { click: function() { fileInput.value = ''; fileInput.click(); } } });
+      var valueInput = el('input', { type: 'text', inputmode: 'decimal', id: 'alcValue', placeholder: '0.00', cls: 'val-input', autocomplete: 'off' });
+      var vehicleInput = el('input', { type: 'text', id: 'alcVehicle', placeholder: '例：福井 400 あ 12-34', autocomplete: 'off' });
+      vehicleInput.value = readJson(VEHICLE_KEY, '') || '';
+      valueInput.addEventListener('input', function() { err.textContent = ''; });
+      vehicleInput.addEventListener('input', function() { err.textContent = ''; });
+      var sendBtn;
+
+      fileInput.addEventListener('change', function() {
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        if (file.lastModified && Date.now() - file.lastModified > PHOTO_MAX_AGE_MIN * 60000) {
+          err.textContent = 'その場で撮影した写真を使ってください（古い写真は使えません）';
+          return;
+        }
+        err.textContent = '写真を準備中...';
+        compressPhoto(file).then(function(data) {
+          photoData = data;
+          preview.src = data;
+          preview.classList.remove('hidden');
+          photoBtn.textContent = '📷 撮り直す';
+          err.textContent = '';
+        }, function(e) { err.textContent = e.message; });
+      });
+
+      function submit() {
+        var v = valueInput.value.trim().replace(/[０-９．]/g, function(c) {
+          return c === '．' ? '.' : String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+        });
+        if (!photoData) { err.textContent = '顔と検知器の表示が一緒に写った写真を撮ってください'; return; }
+        if (!/^\d+(\.\d{1,3})?$/.test(v) || parseFloat(v) > 5) { err.textContent = '測定値を数字で入れてください（例：0.00）'; return; }
+        var vehicle = vehicleInput.value.trim();
+        if (!vehicle) { err.textContent = '車両番号を入れてください'; return; }
+        var s = loadSettings();
+        sendBtn.disabled = true;
+        err.textContent = '送信中...';
+        postRecord({
+          kind: 'alcohol', phase: phase, name: s.name, empId: s.empId || '', company: s.company || '',
+          jobType: s.jobType || '', vehicle: vehicle, value: v, photo: photoData, clientTime: fmtTs(new Date())
+        }).then(function(r) {
+          sendBtn.disabled = false;
+          if (r && r.status === 'ok') {
+            writeJson(VEHICLE_KEY, vehicle);
+            var patch = { drive: true, detected: !!r.detected };
+            patch[phase] = String(r.received || fmtTs(new Date())).substring(11, 16);
+            setLocalAlcohol(patch);
+            applyServer(r);
+            renderAlcohol();
+            if (r.detected) {
+              showDanger(parseFloat(v).toFixed(2));
+              resolve('detected');
+            } else {
+              closeModal();
+              resolve('ok');
+            }
+          } else if (r && r.status === 'error') {
+            err.textContent = '送れませんでした：' + (r.message || '');
+          } else {
+            err.textContent = '送信できませんでした。電波の良い場所で、もう一度「送信する」を押してください';
+          }
+        });
+      }
+
+      sendBtn = el('button', { cls: 'btn btn-alc', type: 'button', id: 'alcSubmit', text: '送信する', on: { click: submit } });
+      openModal([
+        el('h3', { text: '🍺 ' + label + 'のアルコールチェック' }),
+        el('div', { cls: 'steps-mini', text: '① アルコール検知器で測定する\n② 表示が出ている間に、顔と表示が一緒に写るように撮影\n③ 測定値と車両番号を入れて送信' }),
+        fileInput,
+        photoBtn,
+        preview,
+        el('div', { cls: 'field', style: 'margin-top:12px;' }, [el('label', { for: 'alcValue', text: '測定値（mg/L）' }), valueInput]),
+        el('div', { cls: 'field' }, [el('label', { for: 'alcVehicle', text: '車両番号' }), vehicleInput]),
+        err,
+        sendBtn,
+        el('button', { cls: 'btn btn-secondary', type: 'button', id: 'alcCancel', text: 'やめる',
+          on: { click: function() { closeModal(); resolve(null); } } })
+      ]);
+      $('modal').querySelector('.steps-mini').style.whiteSpace = 'pre-line';
+    });
+  }
+
+  // アルコールチェックのカードから直接チェックする
+  function alcoholOnly(phase) {
+    if (busy) return;
+    var s = loadSettings();
+    if (!settingsComplete(s)) {
+      renderSettings(true);
+      showStatus('先に基本設定（氏名・会社・職種）を保存してください', 'error');
+      return;
+    }
+    setBusy(true);
+    runAlcoholCheck(phase).then(function(res) {
+      if (res === 'ok') showStatus((phase === 'before' ? '運転前' : '運転後') + 'のアルコールチェックを記録しました ✅', 'success');
+      setBusy(false);
+    });
+  }
+
+  // ========== 本日の打刻状態（端末内の記録から） ==========
+  function getTodayState() {
+    var todayStr = fmtDate(new Date());
+    var name = loadSettings().name;
+    var t = { inTs: null, outTs: null };
+    loadHistory().forEach(function(h) {
+      if (h.status !== 'sent' || h.name !== name || String(h.time).indexOf(todayStr) !== 0) return;
+      if (h.type === 'in' && (!t.inTs || h.time < t.inTs)) t.inTs = h.time;
+      if (h.type === 'out' && (!t.outTs || h.time > t.outTs)) t.outTs = h.time;
+    });
+    return t;
+  }
+  function renderTodayState() {
+    var t = getTodayState();
+    var box = $('todayState');
+    box.classList.toggle('hidden', !t.inTs && !t.outTs);
+    box.innerHTML = '';
+    [['本日の出勤', t.inTs, '🟢 '], ['本日の退勤', t.outTs, '🔴 ']].forEach(function(r) {
+      box.appendChild(el('div', { cls: 'row' }, [
+        el('span', { cls: 'lbl', text: r[0] }),
+        el('span', { cls: r[1] ? 'done' : 'yet', text: r[1] ? r[2] + String(r[1]).substring(11, 16) + ' 済み' : '— 未打刻' })
+      ]));
+    });
+    $('checkInBtn').textContent = t.inTs ? '出勤 打刻済み ✓（打ち直す）' : '出 勤';
+    $('checkInBtn').classList.toggle('punched', !!t.inTs);
+    $('checkOutBtn').textContent = t.outTs ? '退勤 打刻済み ✓（打ち直す）' : '退 勤';
+    $('checkOutBtn').classList.toggle('punched', !!t.outTs);
+  }
+
+  // ========== 丸一日忘れた日の申告 ==========
+  function openDeclare() {
+    var s = loadSettings();
+    if (!settingsComplete(s)) {
+      renderSettings(true);
+      showStatus('先に基本設定（氏名・会社・職種）を保存してください', 'error');
+      return;
+    }
+    if (!loadState().serverV3) {
+      showStatus('サーバーと通信できてから使えます。電波の良い場所で開き直してください', 'info');
+      return;
+    }
+    var now = new Date();
+    var reason = '';
+    var dateInput = el('input', { type: 'date', id: 'decDate', max: fmtDate(now), min: fmtDate(addDays(now, -DECLARE_DAYS)) });
+    var inInput = el('input', { type: 'time', id: 'decIn' });
+    var outInput = el('input', { type: 'time', id: 'decOut' });
+    var nextDay = el('input', { type: 'checkbox', id: 'decNext' });
+    var err = el('div', { cls: 'err', id: 'decErr' });
+
+    function submit() {
+      if (!dateInput.value || !inInput.value || !outInput.value) { err.textContent = '日付と時刻をすべて入れてください'; return; }
+      if (!reason) { err.textContent = '理由を選んでください'; return; }
+      var day = parseDate(dateInput.value);
+      if (!day || dateInput.value > fmtDate(now) || dateInput.value < fmtDate(addDays(now, -DECLARE_DAYS))) {
+        err.textContent = '日付は ' + DECLARE_DAYS + '日前から今日までで選んでください';
+        return;
+      }
+      var inTs = dateInput.value + ' ' + inInput.value.substring(0, 5) + ':00';
+      var outDay = nextDay.checked ? fmtDate(addDays(day, 1)) : dateInput.value;
+      var outTs = outDay + ' ' + outInput.value.substring(0, 5) + ':00';
+      if (outTs <= inTs) { err.textContent = '退勤は出勤より後の時刻にしてください（夜勤は「退勤は翌日」に✓）'; return; }
+      if (parseTs(outTs).getTime() >= now.getTime()) { err.textContent = '今より前の時刻にしてください'; return; }
+      closeModal();
+      setBusy(true);
+      showStatus('申告を記録中...', 'info');
+      sendItem(buildItem('fix', 'in', inTs, null, reason)).then(function(r1) {
+        if (r1.status === 'rejected') return r1;
+        return sendItem(buildItem('fix', 'out', outTs, null, reason));
+      }).then(function(r) {
+        if (r.status === 'sent') showStatus(jpDate(dateInput.value) + ' の出勤・退勤を申告しました', 'success');
+        else if (r.status === 'rejected') showStatus('申告を受け付けられませんでした：' + r.message, 'error');
+        else showStatus('送信に失敗しました。記録欄の「再送信」を押してください', 'error');
+      }).then(function() { setBusy(false); });
+    }
+
+    openModal([
+      el('h3', { text: '打刻を忘れた日の申告' }),
+      el('p', { cls: 'lead', text: '出勤も退勤も押さなかった日を、あとから申告できます。「本人修正」として記録されます。' }),
+      el('div', { cls: 'field' }, [el('label', { for: 'decDate', text: '出勤した日' }), dateInput]),
+      el('div', { cls: 'field' }, [el('label', { for: 'decIn', text: '出勤した時刻' }), inInput]),
+      el('div', { cls: 'field' }, [el('label', { for: 'decOut', text: '退勤した時刻' }), outInput]),
+      el('label', { cls: 'check-row', for: 'decNext' }, [nextDay, el('span', { text: '退勤は翌日（夜勤）' })]),
+      el('div', { cls: 'field' }, [el('label', { text: '理由' }), reasonChips(function(r) { reason = r; err.textContent = ''; })]),
+      err,
+      el('button', { cls: 'btn btn-main', type: 'button', id: 'decSubmit', text: 'この内容で申告する', on: { click: submit } }),
+      el('button', { cls: 'btn btn-secondary', type: 'button', text: 'やめる', on: { click: closeModal } })
+    ]);
+  }
+
+  // ========== 安全おみくじ ==========
+  // 一人ひとり違う結果になるよう、氏名＋社員番号＋会社＋日付から決めます（同じ日は何度見ても同じ）
+  var FORTUNES = [
+    { rank: '超大吉', w: 2,  sub: 'めったに出ない大当たり。それでも確認は忘れずに。' },
+    { rank: '大吉',   w: 15, sub: '気持ちよく動ける日。いつもどおりの確認で万全に。' },
+    { rank: '中吉',   w: 25, sub: '落ち着いて進めれば、うまくいく日。' },
+    { rank: '小吉',   w: 25, sub: 'ひとつずつ、ていねいに。' },
+    { rank: '吉',     w: 20, sub: '基本を守れば安心の一日。' },
+    { rank: '末吉',   w: 13, sub: '後半に運が上向き。最後まで気をゆるめずに。' }
+  ];
+  var SAFETY = [
+    '足元よし！段差とぬれた床に気をつけて。',
+    '「だろう」より「かもしれない」で動こう。',
+    '急ぐときほど、ひと呼吸おいてから。',
+    '指差し呼称でひとつ確認、ひとつ安心。',
+    '水分は、のどが渇く前にひと口。',
+    '慣れた作業こそ、初心で。',
+    '声をかけ合えば、ヒヤリは減る。',
+    '道具と保護具は、使う前にひと目チェック。',
+    '無理な姿勢で持たない。重いものは二人で。',
+    '車の運転は、車間距離をたっぷりと。',
+    '歩きスマホはしない。止まってから見る。',
+    '整理整頓は、いちばんの事故防止。',
+    '「おかしいな」と思ったら、まず止まる・知らせる。',
+    '体調がいまひとつなら、早めに周りへ伝えよう。',
+    'バックする車の後ろには入らない。',
+    '階段は手すりを持って、一段ずつ。',
+    '合図は大きく、はっきりと。',
+    '休憩はしっかり。疲れは判断をにぶらせる。',
+    '近道・省略はケガのもと。決めた手順どおりに。',
+    '動き出す前に、周りをひと回り見よう。',
+    '分からないことは、聞くのがいちばんの近道。',
+    '帰り道こそ気を抜かない。家に着くまでが仕事。',
+    '天気の変わり目に注意。空を一度見上げよう。',
+    '手元よし、頭上よし、足元よし。',
+    '「まあいいか」を、今日は一回やめてみよう。',
+    '挨拶は安全の第一歩。相手の顔色もついでに確認。',
+    '服装と靴ひも、出発前にもう一度。',
+    '暗い場所では、ライトと反射材を味方に。',
+    '一人で抱えない。困ったらすぐ相談。',
+    '最後の片づけまで、ていねいに。',
+    '焦りを感じたら、手を止めて深呼吸。',
+    '「いつもと違う」に気づいたら、声に出そう。'
+  ];
+  var ACTIONS = [
+    '最初に会った人に、自分から挨拶する',
+    '作業の前に深呼吸を3回',
+    '靴ひもを結び直す',
+    '「ありがとう」を3回言う',
+    '水筒の中身を確認する',
+    '背伸びをひとつ',
+    '仲間の良いところを一つ見つける',
+    '車に乗る前に、ぐるっと一周見る',
+    '持ち物を声に出して確認する',
+    '昼休みに5分だけ目を閉じる',
+    '手洗い・うがいをていねいに',
+    '肩を10回まわす',
+    '帰る前に、明日の準備をひとつ',
+    'ゴミをひとつ拾う',
+    '笑顔で「お先に失礼します」',
+    '首をゆっくり回す',
+    '「ご安全に」と声をかける',
+    '身の回りを1か所だけ片づける',
+    '家族や仲間に、ひとことメッセージ',
+    '空を見上げて天気を確かめる'
+  ];
+  var ITEMS = ['手袋', 'タオル', '水筒', '飴ひとつぶ', '腕時計', '反射材', 'ボールペン', 'ハンカチ',
+               '帽子', '温かいお茶', 'おにぎり', 'メモ帳', 'ばんそうこう', '予備の靴下', '缶コーヒー', 'のど飴'];
+  var THANKS = [
+    '今日も一日おつかれさまでした。無事故がいちばんの成果です。',
+    'おつかれさま！帰り道も安全運転で。',
+    '今日のがんばり、ちゃんと届いています。ゆっくり休んでください。',
+    '無事に終えられたのは、あなたの確認のおかげです。',
+    'おつかれさまでした。お風呂でしっかり温まって。',
+    '今日も一日ありがとう。明日もよろしくお願いします。',
+    'よく働いた日は、よく食べてよく寝よう。',
+    '家に着くまでが仕事。最後まで気をつけて。',
+    '今日の自分に花マル。おつかれさま！',
+    '体をいたわるのも仕事のうち。水分をとってくださいね。',
+    'おつかれさまでした。今日の「よかったこと」を一つ思い出して帰ろう。',
+    '一日ぶじに終了。あなたのおかげで現場が回りました。',
+    'おつかれさま！今夜は早めに休んで、明日に備えよう。',
+    '今日もありがとう。帰り道は急がず、ゆっくりと。'
+  ];
+
+  function hashStr(str) { // FNV-1a
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function makeRng(seed) { // mulberry32
+    var a = seed >>> 0;
+    return function() {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function pick(list, rng) { return list[Math.floor(rng() * list.length)]; }
+  function personSeed(dateStr, salt) {
+    var s = loadSettings();
+    return hashStr([s.name || '', s.empId || '', s.company || '', dateStr, salt].join('|'));
+  }
+  function drawOmikuji(dateStr) {
+    var rng = makeRng(personSeed(dateStr, 'omikuji'));
+    var total = 0;
+    FORTUNES.forEach(function(f) { total += f.w; });
+    var x = rng() * total;
+    var fortune = FORTUNES[FORTUNES.length - 1];
+    for (var i = 0; i < FORTUNES.length; i++) {
+      if (x < FORTUNES[i].w) { fortune = FORTUNES[i]; break; }
+      x -= FORTUNES[i].w;
+    }
+    return {
+      rank: fortune.rank,
+      sub: fortune.sub,
+      safety: pick(SAFETY, rng),
+      action: pick(ACTIONS, rng),
+      item: pick(ITEMS, rng)
+    };
+  }
+  function thanksMessage(dateStr) {
+    return pick(THANKS, makeRng(personSeed(dateStr, 'thanks')));
+  }
+
+  function omikujiDrawnToday() {
+    var o = readJson(OMIKUJI_KEY, {});
+    return o.date === fmtDate(new Date()) && o.name === loadSettings().name;
+  }
+  function renderOmikujiCard() {
+    var shown = omikujiDrawnToday();
+    $('omikujiCard').classList.toggle('hidden', !shown);
+    if (shown) {
+      var o = drawOmikuji(fmtDate(new Date()));
+      $('omikujiRank').textContent = o.rank;
+      $('omikujiMsg').textContent = o.safety;
+    }
+  }
+  function omikujiResultNodes(o) {
+    return [
+      el('div', { cls: 'fortune', id: 'fortuneRank', text: o.rank }),
+      el('div', { cls: 'fortune-sub', text: o.sub }),
+      el('div', { cls: 'omikuji-row' }, [el('div', { cls: 'k', text: '今日の安全ひとこと' }), el('div', { cls: 'v', text: o.safety })]),
+      el('div', { cls: 'omikuji-row' }, [el('div', { cls: 'k', text: 'ラッキー行動' }), el('div', { cls: 'v', text: o.action })]),
+      el('div', { cls: 'omikuji-row' }, [el('div', { cls: 'k', text: 'ラッキーアイテム' }), el('div', { cls: 'v', text: o.item })]),
+      el('button', { cls: 'btn btn-main', type: 'button', id: 'omikujiClose', text: '今日もご安全に！', on: { click: closeModal } })
+    ];
+  }
+  function showOmikujiResult() {
+    var today = fmtDate(new Date());
+    writeJson(OMIKUJI_KEY, { date: today, name: loadSettings().name });
+    renderOmikujiCard();
+    openModal([el('h3', { text: '今日の安全おみくじ' })].concat(omikujiResultNodes(drawOmikuji(today))));
+  }
+
+  // ========== 連続パーフェクト ==========
+  var MILESTONES = [3, 5, 10, 20, 30, 50, 100, 200, 300];
+  function streakLine(n) {
+    if (n <= 0) return '今日からパーフェクト打刻をはじめよう';
+    if (MILESTONES.indexOf(n) >= 0) return '🎉 連続 ' + n + '日 達成！すばらしい！';
+    return '連続 ' + n + '日 パーフェクト打刻中';
+  }
+  function renderStreak() {
+    var s = loadSettings();
+    var st = loadState();
+    var show = !!(st.serverV3 && st.name === s.name && settingsComplete(s));
+    $('streakCard').classList.toggle('hidden', !show);
+    if (!show) return;
+    var n = st.streak || 0;
+    $('streakIcon').textContent = n > 0 ? '🔥' : '🌱';
+    $('streakNum').innerHTML = '';
+    if (n > 0) {
+      $('streakNum').appendChild(document.createTextNode('連続 ' + n));
+      $('streakNum').appendChild(el('small', { text: '日' }));
+    } else {
+      $('streakNum').textContent = 'ここからスタート';
+    }
+    var fix = st.monthFix || 0;
+    $('streakText').textContent = (n > 0 ? '修正なしのパーフェクト打刻' : '修正なしで打刻すると日数が伸びます') +
+      ' ／ 今月の修正 ' + fix + '回';
+  }
+  function renderLast() {
+    var last = currentLast();
+    $('lastInfo').textContent = last ? '前回の記録：' + last.type + ' ' + jpDateTime(last.timestamp) : '';
+  }
+
+  // ========== 打刻後のごほうび画面 ==========
+  function showReward(type) {
+    var st = loadState();
+    var streakNode = st.serverV3 ? el('div', { cls: 'reward-streak', id: 'rewardStreak', text: '🔥 ' + streakLine(st.streak || 0) }) : null;
+    var today = fmtDate(new Date());
+
+    if (type === 'in') {
+      var box = el('div', { cls: 'omikuji-box', id: 'omikujiBox', text: '🎋' });
+      var drawBtn = el('button', { cls: 'btn btn-main', type: 'button', id: 'drawBtn',
+        text: omikujiDrawnToday() ? '今日のおみくじを見る' : 'おみくじを引く' });
+      drawBtn.addEventListener('click', function() {
+        drawBtn.disabled = true;
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (omikujiDrawnToday() || reduce) { showOmikujiResult(); return; }
+        box.classList.add('shake');
+        setTimeout(showOmikujiResult, 950);
+      });
+      openModal([
+        el('h3', { text: '出勤を記録しました ✅' }),
+        streakNode,
+        el('p', { cls: 'lead', text: '今日の安全おみくじが引けます。' }),
+        box,
+        drawBtn,
+        el('button', { cls: 'btn btn-secondary', type: 'button', text: '引かずに閉じる', on: { click: closeModal } })
+      ]);
+    } else {
+      openModal([
+        el('h3', { text: '退勤を記録しました ✅' }),
+        el('div', { cls: 'big-emoji', text: '🍵' }),
+        el('p', { cls: 'lead', id: 'thanksMsg', text: thanksMessage(today) }),
+        streakNode,
+        el('button', { cls: 'btn btn-main', type: 'button', id: 'rewardClose', text: '閉じる', on: { click: closeModal } })
+      ]);
+    }
+  }
 
   // ========== 再送信 ==========
   function resend(localId) {
-    var s = loadSettings();
-    var url = (s.webappUrl || DEFAULT_WEBAPP_URL || '').trim();
-    if (!url) { showStatus('サーバーURLが未設定です', 'error'); return; }
+    if (busy) return;
     var history = loadHistory();
     var item = null;
     for (var i = 0; i < history.length; i++) {
       if (history[i].localId === localId) { item = history[i]; break; }
     }
     if (!item) return;
-
+    if (!getUrl()) { showStatus('サーバーURLが未設定です', 'error'); return; }
     showStatus('再送信中...', 'info');
-    var payload = {
-      type: item.type === 'in' ? '出勤' : '退勤',
-      name: item.name,
-      empId: item.empId || '',
-      timestamp: item.time,
-      lat: item.lat,
-      lng: item.lng,
-      accuracy: item.accuracy,
-      mapsUrl: item.mapsUrl
-    };
-    sendRecord(url, payload).then(function(ok) {
-      item.status = ok ? 'sent' : 'failed';
-      saveHistory(history);
-      renderHistory();
-      updateTodayStateDisplay();
-      showStatus(ok ? '再送信に成功しました' : '再送信に失敗しました。もう一度お試しください',
-                 ok ? 'success' : 'error');
+    sendItem(item).then(function(res) {
+      if (res.status === 'sent') showStatus('再送信に成功しました', 'success');
+      else if (res.status === 'rejected') showStatus('受け付けられませんでした：' + res.message, 'error');
+      else showStatus('再送信に失敗しました。もう一度お試しください', 'error');
     });
   }
 
-  // ========== 履歴表示 ==========
+  // ========== 履歴表示（本日分＋今日入力した修正＋未送信分） ==========
   function renderHistory() {
-    var list = document.getElementById('historyList');
-    var history = loadHistory();
-    var today = new Date();
-    var todayStr = today.getFullYear() + '-' + pad(today.getMonth()+1) + '-' + pad(today.getDate());
-    var todayItems = history.filter(function(h) { return h.time.indexOf(todayStr) === 0; });
-
-    if (todayItems.length === 0) {
-      list.innerHTML = '<div style="text-align:center; color:#aaa; padding:20px; font-size:13px;">本日の記録はまだありません</div>';
+    renderTodayState();
+    var list = $('historyList');
+    var todayStr = fmtDate(new Date());
+    var items = loadHistory().filter(function(h) {
+      return String(h.time).indexOf(todayStr) === 0 || h.createdDate === todayStr || h.status === 'failed';
+    });
+    list.innerHTML = '';
+    if (items.length === 0) {
+      list.appendChild(el('div', { cls: 'empty', text: '本日の記録はまだありません' }));
       return;
     }
-    list.innerHTML = todayItems.map(function(h) {
-      var badge = h.type === 'in'
-        ? '<span class="badge badge-in">出勤</span>'
-        : '<span class="badge badge-out">退勤</span>';
-      var timeOnly = h.time.substring(11, 19);
-      var statusHtml, rightHtml;
+    items.forEach(function(h) {
+      var isToday = String(h.time).indexOf(todayStr) === 0;
+      var left = el('div', { cls: 'history-left' }, [
+        el('span', { cls: 'badge ' + (h.type === 'in' ? 'badge-in' : 'badge-out'), text: typeLabel(h.type) }),
+        h.kind === 'fix' ? el('span', { cls: 'badge badge-fix', text: '修正' }) : null,
+        el('span', { cls: 'history-time', text: isToday ? String(h.time).substring(11, 19) : jpDateTime(h.time) })
+      ]);
+      var right = el('div');
       if (h.status === 'sent') {
-        statusHtml = '<span class="status-tag status-sent">✓ 記録済</span>';
-        rightHtml = '<a class="map-link" href="' + h.mapsUrl + '" target="_blank">地図</a>';
+        left.appendChild(el('span', { cls: 'status-tag status-sent', text: '✓ 記録済' }));
+        if (h.mapsUrl) right.appendChild(el('a', { cls: 'map-link', href: h.mapsUrl, target: '_blank', rel: 'noopener', text: '地図' }));
+      } else if (h.status === 'rejected') {
+        left.appendChild(el('span', { cls: 'status-tag status-failed', text: '✕ 受付不可' }));
       } else {
-        statusHtml = '<span class="status-tag status-failed">✕ 未送信</span>';
-        rightHtml = '<button class="btn-resend" data-resend="' + h.localId + '">再送信</button>';
+        left.appendChild(el('span', { cls: 'status-tag status-failed', text: '✕ 未送信' }));
+        right.appendChild(el('button', { cls: 'btn-resend', type: 'button', 'data-resend': String(h.localId), text: '再送信' }));
       }
-      return '<div class="history-item">' +
-        '<div class="history-left">' + badge +
-        '<span class="history-time">' + timeOnly + '</span>' + statusHtml + '</div>' +
-        '<div>' + rightHtml + '</div></div>';
-    }).join('');
+      list.appendChild(el('div', { cls: 'history-item' }, [left, right]));
+    });
   }
+
+  // ========== 画面の準備 ==========
+  fillSelect($('company'), COMPANIES, '選んでください');
+  fillSelect($('jobType'), JOBS, '選んでください');
+  renderSettings(false);
+  updateClock();
+  setInterval(updateClock, 1000);
   renderHistory();
-  updateTodayStateDisplay();
+  renderStreak();
+  renderLast();
+  renderOmikujiCard();
+  renderAlcohol();
+
+  $('saveSettingsBtn').addEventListener('click', function() {
+    var name = $('employeeName').value.trim();
+    var empId = $('employeeId').value.trim();
+    var company = $('company').value;
+    var jobType = $('jobType').value;
+    var webappUrl = $('webappUrl').value.trim();
+    if (!name) { showBox('settingStatus', '氏名を入力してください', 'error'); return; }
+    if (!company) { showBox('settingStatus', '会社を選んでください', 'error'); return; }
+    if (!jobType) { showBox('settingStatus', '職種を選んでください', 'error'); return; }
+    if (!webappUrl) { showBox('settingStatus', 'サーバーURLを入力してください（管理者にご確認ください）', 'error'); return; }
+    saveSettings({ name: name, empId: empId, company: company, jobType: jobType, webappUrl: webappUrl });
+    unlocked = false; // 保存したら再びロック
+    $('settingStatus').className = 'status';
+    renderSettings(false);
+    renderStreak();
+    renderLast();
+    renderOmikujiCard();
+    showStatus('設定を保存しました', 'success');
+    setTimeout(hideStatus, 2000);
+    fetchStatus().then(applyServer);
+  });
+  $('editSettingsBtn').addEventListener('click', askUnlock);
+  $('unlockBtn').addEventListener('click', askUnlock);
+  $('alcBeforeBtn').addEventListener('click', function() { alcoholOnly('before'); });
+  $('alcAfterBtn').addEventListener('click', function() { alcoholOnly('after'); });
+
+  $('checkInBtn').addEventListener('click', function() { punch('in'); });
+  $('checkOutBtn').addEventListener('click', function() { punch('out'); });
+  $('declareBtn').addEventListener('click', openDeclare);
+  $('omikujiAgainBtn').addEventListener('click', showOmikujiResult);
 
   // 再送信ボタン（イベント委譲）
-  document.getElementById('historyList').addEventListener('click', function(e) {
+  $('historyList').addEventListener('click', function(e) {
     var btn = e.target.closest ? e.target.closest('[data-resend]') : null;
-    if (btn) {
-      resend(Number(btn.getAttribute('data-resend')));
-    }
+    if (btn) resend(Number(btn.getAttribute('data-resend')));
   });
 
-  // ========== 履歴クリア ==========
-  document.getElementById('clearHistoryBtn').addEventListener('click', function() {
-    if (confirm('端末内の履歴を消去します。よろしいですか？\n（サーバー側の記録は消えません）')) {
-      saveHistory([]);
+  // 履歴クリア（未送信の記録は消さずに残す）
+  $('clearHistoryBtn').addEventListener('click', function() {
+    if (confirm('端末内の履歴を消去します。よろしいですか？\n（サーバー側の記録は消えません。未送信の記録は残します）')) {
+      saveHistory(loadHistory().filter(function(h) { return h.status === 'failed'; }));
       renderHistory();
-      updateTodayStateDisplay();
+      renderLast();
       showStatus('履歴をクリアしました', 'info');
       setTimeout(hideStatus, 2000);
     }
   });
 
-  // ========== About ==========
-  document.getElementById('aboutLink').addEventListener('click', function(e) {
+  $('aboutLink').addEventListener('click', function(e) {
     e.preventDefault();
-    document.getElementById('aboutCard').classList.toggle('hidden');
+    $('aboutCard').classList.toggle('hidden');
   });
+
+  // 開いたときに、連続日数と前回の記録を最新にする
+  fetchStatus().then(applyServer);
 
 })();
 </script>
