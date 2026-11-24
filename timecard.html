@@ -170,7 +170,7 @@
   .big-emoji { font-size: 56px; text-align: center; line-height: 1; margin: 6px 0 10px; }
   /* 登録ロック */
   input[readonly], select:disabled { background: #eee; color: #555; cursor: not-allowed; }
-  .lock-note { font-size: 12px; color: #2e7d32; background: #e8f5e9; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-weight: 700; }
+  .lock-note { white-space: pre-line; line-height: 1.6; font-size: 12px; color: #2e7d32; background: #e8f5e9; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-weight: 700; }
   .admin-link { background: none; border: none; padding: 4px; font-size: 11px; color: #999; text-decoration: underline; cursor: pointer; font-family: inherit; }
 
   /* 本日の打刻状態 */
@@ -343,7 +343,7 @@
     </p>
   </div>
 
-  <footer>v4.0 アルコールチェック・打刻もれ修正・安全おみくじ対応</footer>
+  <footer>v4.0.1 アルコールチェック・打刻もれ修正・安全おみくじ対応</footer>
 </div>
 
 <div class="overlay hidden" id="overlay" role="dialog" aria-modal="true">
@@ -466,6 +466,8 @@
     return (s.webappUrl || DEFAULT_WEBAPP_URL || '').trim();
   }
   function settingsComplete(s) { return !!(s && s.name && s.company && s.jobType && getUrl()); }
+  // 打刻できるかどうか（氏名とサーバーURLがあれば打刻できる。会社・職種は未設定でも打刻は止めない）
+  function canPunch(s) { return !!(s && s.name && getUrl()); }
 
   var unlocked = false; // 管理者コードで一時的にロックを外しているか
 
@@ -485,7 +487,8 @@
     $('company').disabled = locked && !!s.company;
     $('jobType').disabled = locked && !!s.jobType;
     $('lockNote').classList.toggle('hidden', !locked);
-    $('lockNote').textContent = '🔒 登録済み：' + (s.name || '') + (s.empId ? '（' + s.empId + '）' : '');
+    $('lockNote').textContent = '🔒 登録済み：' + (s.name || '') + (s.empId ? '（' + s.empId + '）' : '') +
+      '\n氏名は変更できないため、押してもキーボードは出ません。';
     $('unlockWrap').classList.toggle('hidden', !locked);
 
     var done = settingsComplete(s) && !forceEdit;
@@ -495,7 +498,7 @@
       $('userName').textContent = '👤 ' + s.name;
       $('userSub').textContent = s.company + '・' + s.jobType + (s.empId ? '（' + s.empId + '）' : '');
     } else if (s.name && (!s.company || !s.jobType)) {
-      showBox('settingStatus', '会社と職種を選んで「設定を保存」を押してください', 'info');
+      showBox('settingStatus', '会社と職種をタップして一覧から選び、「設定を保存」を押してください（選ばなくても打刻はできます）', 'info');
     }
   }
 
@@ -991,9 +994,9 @@
   function punch(type) {
     if (busy) return;
     var s = loadSettings();
-    if (!settingsComplete(s)) {
+    if (!canPunch(s)) {
       renderSettings(true);
-      showStatus('先に基本設定（氏名・会社・職種）を保存してください', 'error');
+      showStatus('先に基本設定（氏名）を保存してください', 'error');
       return;
     }
 
@@ -1131,7 +1134,7 @@
     };
   }
   function renderAlcohol() {
-    var show = alcoholEnabled() && settingsComplete(loadSettings());
+    var show = alcoholEnabled() && canPunch(loadSettings());
     $('alcCard').classList.toggle('hidden', !show);
     if (!show) return;
     var a = alcoholStatus();
@@ -1276,9 +1279,9 @@
   function alcoholOnly(phase) {
     if (busy) return;
     var s = loadSettings();
-    if (!settingsComplete(s)) {
+    if (!canPunch(s)) {
       renderSettings(true);
-      showStatus('先に基本設定（氏名・会社・職種）を保存してください', 'error');
+      showStatus('先に基本設定（氏名）を保存してください', 'error');
       return;
     }
     setBusy(true);
@@ -1320,9 +1323,9 @@
   // ========== 丸一日忘れた日の申告 ==========
   function openDeclare() {
     var s = loadSettings();
-    if (!settingsComplete(s)) {
+    if (!canPunch(s)) {
       renderSettings(true);
-      showStatus('先に基本設定（氏名・会社・職種）を保存してください', 'error');
+      showStatus('先に基本設定（氏名）を保存してください', 'error');
       return;
     }
     if (!loadState().serverV3) {
@@ -1547,7 +1550,7 @@
   function renderStreak() {
     var s = loadSettings();
     var st = loadState();
-    var show = !!(st.serverV3 && st.name === s.name && settingsComplete(s));
+    var show = !!(st.serverV3 && st.name === s.name && canPunch(s));
     $('streakCard').classList.toggle('hidden', !show);
     if (!show) return;
     var n = st.streak || 0;
